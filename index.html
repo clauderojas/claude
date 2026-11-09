@@ -167,7 +167,7 @@ input[type="range"] { width: 100%; accent-color: var(--accent); }
 
 /* songs */
 .songs { display: grid; grid-template-columns: minmax(220px, 300px) minmax(0, 1fr); gap: 22px; }
-.tracklist { list-style: none; margin: 0; padding: 0; display: grid; gap: 2px; max-height: 470px; overflow-y: auto; border-right: 1px solid var(--line); padding-right: 12px; }
+.tracklist { list-style: none; margin: 0; padding: 0; display: grid; gap: 2px; max-height: 640px; overflow-y: auto; border-right: 1px solid var(--line); padding-right: 12px; }
 .tracklist button {
   width: 100%; text-align: left; border: 0; background: transparent; border-radius: 8px; padding: 7px 10px;
   display: grid; grid-template-columns: 26px minmax(0, 1fr); gap: 8px; align-items: baseline;
@@ -188,6 +188,35 @@ input[type="range"] { width: 100%; accent-color: var(--accent); }
 }
 .prog button:hover { border-color: var(--accent); }
 .prog button.now { background: var(--hi); color: var(--surface); border-color: var(--hi); transform: translateY(-2px); }
+/* sections + chord tablature */
+.sections { display: grid; gap: 14px; }
+.sec { display: grid; gap: 6px; min-width: 0; }
+.sec-h { display: flex; align-items: baseline; gap: 10px; }
+.sec-name { font: 700 13px/1 var(--f-mono); letter-spacing: .1em; text-transform: uppercase; color: var(--accent); }
+.sec-rep { font: 600 12px/1 var(--f-mono); color: var(--muted); border: 1px solid var(--line); border-radius: 6px; padding: 3px 6px; }
+.sec.now .sec-name { color: var(--hi); }
+.tab { display: flex; overflow-x: auto; background: var(--bg); border: 1px solid var(--line); border-radius: 12px; padding: 8px 6px 10px; scroll-behavior: smooth; }
+.tlab, .tcol { display: grid; grid-template-rows: 30px repeat(6, 20px); flex: none; }
+.tlab span { font: 600 13px/20px var(--f-mono); color: var(--muted); width: 22px; text-align: center; }
+.tcol { width: 64px; border: 0; padding: 0; background: transparent; border-radius: 8px; transition: background .12s; }
+.tcol:hover { background: var(--hi-soft); }
+.tcol.now { background: var(--accent-soft); }
+.tname { font: 800 17px/30px var(--f-display); color: var(--ink); white-space: nowrap; }
+.tcol.now .tname { color: var(--accent); }
+.tcell { position: relative; font: 700 14px/20px var(--f-mono); color: var(--ink); z-index: 0; }
+.tcell::before { content: ""; position: absolute; left: 0; right: 0; top: 50%; border-top: 1.5px solid var(--muted); opacity: .55; z-index: -1; }
+.tcell { background: linear-gradient(var(--bg), var(--bg)) center / 18px 16px no-repeat; }
+.tcol:hover .tcell { background-image: linear-gradient(var(--hi-soft), var(--hi-soft)); }
+.tcol.now .tcell { background-image: linear-gradient(var(--accent-soft), var(--accent-soft)); }
+.tend { flex: none; width: 2px; margin-top: 40px; height: 100px; background: var(--muted); opacity: .6; }
+.song-note { margin: 0; font-size: 13.5px; color: var(--ink); border-left: 3px solid var(--accent); padding-left: 10px; }
+.editor { border: 1px solid var(--line); border-radius: 12px; padding: 10px 14px; display: grid; gap: 8px; }
+.editor summary { cursor: pointer; font-weight: 600; }
+.editor[open] { display: grid; }
+.editor textarea { width: 100%; border: 1px solid var(--line); background: var(--bg); border-radius: 10px; padding: 10px 12px; font: 14px/1.6 var(--f-mono); resize: vertical; margin-top: 8px; }
+.hint-sm { margin: 8px 0 0; font-size: 13px; color: var(--muted); }
+.hint-sm code { font-family: var(--f-mono); background: var(--bg); padding: 1px 5px; border-radius: 4px; }
+.badge { font: 600 11px/1 var(--f-mono); background: var(--accent); color: #fff; border-radius: 5px; padding: 3px 6px; margin-left: 6px; }
 .edit { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 8px; }
 .edit input, select {
   border: 1px solid var(--line); background: var(--bg); border-radius: 10px; padding: 9px 12px; min-width: 0;
@@ -301,27 +330,33 @@ footer { color: var(--muted); font-size: 13px; padding-block: 0 40px; }
     </section>
 
     <section class="panel wide" aria-labelledby="hSongs">
-      <h2 id="hSongs">La Ley · MTV Unplugged<small>Grabado en Miami el 28 de junio de 2001 · 16 canciones</small></h2>
+      <h2 id="hSongs">La Ley · MTV Unplugged · acordes y tablaturas<small>Grabado en Miami el 28 de junio de 2001 · 16 canciones</small></h2>
       <div class="songs">
         <ol class="tracklist" id="tracklist"></ol>
         <div class="song-detail">
           <p class="song-title" id="songTitle">Animal</p>
-          <p class="notice">Aquí no hay letras ni transcripciones oficiales. Cada canción trae una <b>progresión de práctica</b> para tocar en su ambiente: edítala con los acordes de tu cancionero y queda guardada en este navegador.</p>
-          <div class="prog" id="prog"></div>
-          <div class="edit">
-            <input id="progInput" type="text" spellcheck="false" autocomplete="off" aria-label="Acordes de la canción, separados por espacios">
-            <button class="btn" id="progSave" type="button">Guardar acordes</button>
-          </div>
-          <p class="err" id="progErr"></p>
+          <p class="notice">Acordes reales del concierto según las transcripciones de usuarios de <b>LaCuerda.net</b>, con la tablatura de cada posición. Las letras no se incluyen. Toca una columna de la tablatura para ponerla en la guitarra.</p>
+          <p class="song-note" id="songNote" hidden></p>
+          <div class="sections" id="sections"></div>
+          <details class="editor">
+            <summary>Corregir acordes <span class="badge" id="songCustom" hidden>Editado por ti</span></summary>
+            <p class="hint-sm">Una línea por sección: <code>Coro: G D Am C x2</code>. Se guarda en este navegador.</p>
+            <textarea id="progInput" rows="5" spellcheck="false" autocomplete="off" aria-label="Estructura de acordes de la canción"></textarea>
+            <div class="controls">
+              <button class="btn" id="progSave" type="button">Guardar acordes</button>
+              <button class="btn" id="progReset" type="button">Volver a los de LaCuerda</button>
+            </div>
+            <p class="err" id="progErr"></p>
+          </details>
           <div class="controls">
-            <button class="btn primary" id="songPlay" type="button">▶ Tocar la progresión</button>
+            <button class="btn primary" id="songPlay" type="button">▶ Tocar la canción</button>
             <label class="check"><input type="checkbox" id="autoStrum" checked> La guitarra rasguea sola</label>
             <label class="check">Tiempos por acorde
               <select id="beats" aria-label="Tiempos por acorde">
                 <option value="2">2</option><option value="4" selected>4</option><option value="8">8</option>
               </select>
             </label>
-            <a id="songSearch" href="#" target="_blank" rel="noopener">Buscar los acordes originales ↗</a>
+            <a id="songSearch" href="#" target="_blank" rel="noopener">Ver la fuente en LaCuerda.net ↗</a>
           </div>
         </div>
       </div>
@@ -447,7 +482,6 @@ function variantsFor(rootPc, q) {
   // keep only shapes that actually spell the chord
   const pcs = new Set(QMAP[q][2].map(v => (rootPc + v) % 12));
   const ok = list.filter(f => f.every((v, i) => v < 0 || pcs.has((OPEN[i] + v) % 12)));
-  ok.sort((a, b) => minFret(a) - minFret(b));
   // the most common (open / lowest) shape first, but keep the first-found preferred if it's open
   const pref = OPEN_CHORDS[keyName(rootPc, q)];
   if (pref) { const i = ok.findIndex(f => shapeKey(f) === shapeKey(pref)); if (i > 0) ok.unshift(ok.splice(i, 1)[0]); }
@@ -1107,7 +1141,22 @@ function shapeForText(txt) {
   const c = parseChord(txt);
   if (!c) return null;
   const v = variantsFor(c.root, c.q);
-  return v.length ? v[0] : null;
+  if (!v.length) return null;
+  return c.bass === null ? v[0] : withBass(v, c.bass);
+}
+// put the slash-chord bass note on the lowest sounding string
+function withBass(variants, bass) {
+  for (const base of variants) {
+    const first = base.findIndex(x => x >= 0);
+    if ((OPEN[first] + base[first]) % 12 === bass) return base;
+    for (let j = first - 1; j >= 0; j--) {
+      const fr = (bass - OPEN[j] % 12 + 24) % 12;
+      if (fr <= 4) { const f = base.slice(); f[j] = fr; for (let k = 0; k < j; k++) f[k] = X; return f; }
+    }
+    const fr = (bass - OPEN[first] % 12 + 24) % 12;
+    if (fr <= 5) { const f = base.slice(); f[first] = fr; return f; }
+  }
+  return variants[0];
 }
 
 /* ================= notation ================= */
@@ -1188,7 +1237,7 @@ function at(t, fn) { setTimeout(fn, Math.max(0, (t - ctx.currentTime) * 1000)); 
 function start(mode) {
   ensureAudio(); if (!ctx) return;
   stop();
-  const prog = mode === 'song' ? currentProg().map(c => ({ c, f: shapeForText(c) })).filter(o => o.f) : null;
+  const prog = mode === 'song' ? flattenSong() : null;
   if (mode === 'song' && !prog.length) return;
   play = { mode, step: 0, next: ctx.currentTime + 0.1, prog, beats: +$('#beats').value };
   play.timer = setInterval(tick, 25);
@@ -1199,12 +1248,12 @@ function stop() {
   if (!play) return;
   clearInterval(play.timer); play = null;
   highlightSlot(-1);
-  document.querySelectorAll('#prog button.now').forEach(b => b.classList.remove('now'));
+  markProg(-1);
   updateButtons();
 }
 function updateButtons() {
   $('#playBtn').innerHTML = play && play.mode === 'pattern' ? '■ Parar <span class="k">Espacio</span>' : '▶ Tocar ritmo <span class="k">Espacio</span>';
-  $('#songPlay').textContent = play && play.mode === 'song' ? '■ Parar' : '▶ Tocar la progresión';
+  $('#songPlay').textContent = play && play.mode === 'song' ? '■ Parar' : '▶ Tocar la canción';
 }
 function tick() {
   if (!play) return;
@@ -1245,30 +1294,51 @@ document.addEventListener('keydown', e => {
 });
 
 /* ================= La Ley — MTV Unplugged ================= */
+// Acordes por sección según transcripciones de usuarios de LaCuerda.net (sin letras).
+// Formato de cada línea: "Sección: acordes xN"
+const LC = 'https://acordes.lacuerda.net/ley/';
 const SONGS = [
-  { t: 'Animal', p: 'Em C G D' },
-  { t: 'Día Cero', p: 'Am F C G' },
-  { t: 'Mentira', p: 'Dm Bb F C' },
-  { t: 'Prisioneros de la Piel', p: 'Em G D A' },
-  { t: 'Hombre', p: 'Am G F E' },
-  { t: 'Krazyworld', p: 'Em7 A Cmaj7 D' },
-  { t: 'Intenta Amar', p: 'C G Am F' },
-  { t: 'El Duelo', ft: 'con Ely Guerra', p: 'G D Em C' },
-  { t: 'The Corridor', p: 'Am Fmaj7 C G' },
-  { t: 'Aquí', p: 'D A Bm G' },
-  { t: 'Delirando', p: 'Em D C B7' },
-  { t: 'Cielo Market', p: 'A E F#m D' },
-  { t: 'La Luna', p: 'Am Em F G' },
-  { t: 'Fuera de mí', p: 'C Em F G' },
-  { t: 'Paraíso', p: 'G Em C D' },
-  { t: 'Al Final', p: 'F C Dm Bb' },
+  { t: 'Animal', u: 'animal_mtv__unplugged', s: 'Intro: E Esus4 x2\nEstrofa: E A E A', n: 'La transcripción indica que el resto de la canción sigue el patrón de la estrofa; intro y final llevan un riff punteado.' },
+  { t: 'Día Cero', u: 'dia_cero_unplugged', s: 'Intro: Gm F Gm F x2\nEstrofa: Gm F Gm F Am Bb Eb Dm Bb Eb\nCoro: Bb Eb Dm x2' },
+  { t: 'Mentira', u: 'mentira_unplugged', s: 'Intro: Am C G x2\nEstrofa: Am C G x2\nCoro: G D A B x2\nPuente: C B A B C B E x2', n: 'Las transcripciones no coinciden en el coro; esta es la versión más citada.' },
+  { t: 'Prisioneros de la Piel', u: 'prisioneros_unplugged', s: 'Intro: D G D G\nParte A: D Bm D Bm\nParte B: Eb F Am Em x2' },
+  { t: 'Hombre', u: 'hombre_unplugged', s: 'Intro: A A7 A A7 x2\nEstrofa: Am Am7 Am Am7 D G\nInterludio: A A7 A A7' },
+  { t: 'Krazyworld', u: 'krazyworld_unplugged', s: 'Intro y estrofas: Am C F Am G x2' },
+  { t: 'Intenta Amar', u: 'intenta_amar_unplugged', s: 'Intro: Amaj7 Fmaj7/C x2\nParte A: Amaj7 Fmaj7/C x2\nParte B: C/G G Dm Am\nCierre: C/G G Dm C/G G' },
+  { t: 'El Duelo', ft: 'con Ely Guerra', u: 'el_duelo_unplugged', s: 'Intro: C Em C Em x2\nEstrofa: Em C Em C x2\nCoro: G D Am C x2' },
+  { t: 'The Corridor', u: 'the_corridor_unplugged', s: 'Intro: Bb C Dm x2\nEstrofa: Bb C Dm x2\nPuente: D G A D G A' },
+  { t: 'Aquí', u: 'aqui_unplugged', s: 'Parte A: D G D G\nParte B: D/F# Em A Asus4 D G' },
+  { t: 'Delirando', u: 'delirando_mtv_unplugged', s: 'Estrofa: E G E G E G A E G A E', n: 'Entre estrofas se repite un riff punteado (6 veces después de la estrofa).' },
+  { t: 'Cielo Market', u: 'cielo_market_unplugged', s: 'Intro: A Bm D A x2\nEstrofa: A Dsus4 D A x2\nCoro: A A/B Am D C' },
+  { t: 'La Luna', u: 'la_luna_unplugged', s: 'Intro: D Em D Em x2\nEstrofa: D Asus4 D Asus4 x2', n: 'Un riff se repite durante casi toda la canción.' },
+  { t: 'Fuera de mí', u: 'fuera_de_mi_unplugged', s: 'Intro: E Esus4 E Esus4\nEstrofa: E Amaj7 E Amaj7 E Amaj7 C#m B\nCoro: E Amaj7 C#m B x2' },
+  { t: 'Paraíso', u: 'paraiso_unplugged', s: 'Estrofa: Em G Em G x2\nParte B: Am C Em G Em G' },
+  { t: 'Al Final', u: 'al_final_unplugged', s: 'Intro: Bm A D A Bm A Bm\nEstrofa: Bm A F# Bm A F# x2', n: 'Otra transcripción la escribe medio tono más arriba (Cm Bb Eb).' },
 ];
 let songIdx = 0;
 function load(k) { try { return localStorage.getItem(k); } catch (e) { return null; } }
 function save(k, v) { try { localStorage.setItem(k, v); } catch (e) {} }
-function currentProg() {
-  const custom = load('ag.prog.' + songIdx);
-  return (custom || SONGS[songIdx].p).split(/\s+/).filter(Boolean);
+function songText(i = songIdx) { return load('ag.song.' + i) || SONGS[i].s; }
+function parseSong(txt) {
+  const secs = [], bad = [];
+  txt.split('\n').map(l => l.trim()).filter(Boolean).forEach((line, li) => {
+    let name = `Parte ${li + 1}`, body = line;
+    const m = /^([^:]+):(.*)$/.exec(line);
+    if (m) { name = m[1].trim(); body = m[2]; }
+    let rep = 1;
+    body = body.replace(/(?:^|\s)[x×](\d+)\s*$/i, (_, n) => { rep = Math.max(1, Math.min(8, +n)); return ''; });
+    const chords = body.split(/\s+/).filter(Boolean);
+    chords.forEach(c => { if (!shapeForText(c)) bad.push(c); });
+    if (chords.length) secs.push({ name, rep, chords });
+  });
+  return { secs, bad };
+}
+function flattenSong() {
+  const out = [];
+  parseSong(songText()).secs.forEach((sec, si) => {
+    for (let r = 0; r < sec.rep; r++) sec.chords.forEach((c, k) => { const f = shapeForText(c); if (f) out.push({ c, f, s: si, k }); });
+  });
+  return out;
 }
 function displayChord(txt) {
   const c = parseChord(txt);
@@ -1288,42 +1358,70 @@ function renderTracks() {
     li.appendChild(b); ol.appendChild(li);
   });
 }
+const TAB_ROWS = [5, 4, 3, 2, 1, 0];          // e B G D A E (de arriba a abajo, como en una tablatura)
+const TAB_LBL = ['e', 'B', 'G', 'D', 'A', 'E'];
+function loadChordText(c) {
+  const f = shapeForText(c); if (!f) return;
+  ensureAudio(); setFrets(f); renderVariantsFromIdent(); strum('D', undefined, 0.85);
+}
 function renderSong() {
   const s = SONGS[songIdx];
   $('#songTitle').textContent = s.t + (s.ft ? ` (${s.ft})` : '');
-  const prog = currentProg();
-  const box = $('#prog'); box.innerHTML = '';
-  prog.forEach((c, i) => {
-    const b = document.createElement('button');
-    b.type = 'button'; b.textContent = displayChord(c);
-    b.addEventListener('click', () => {
-      const f = shapeForText(c); if (!f) return;
-      ensureAudio(); setFrets(f); renderVariantsFromIdent(); strum('D', undefined, 0.85);
+  const box = $('#sections'); box.innerHTML = '';
+  const { secs } = parseSong(songText());
+  secs.forEach((sec, si) => {
+    const wrap = document.createElement('div'); wrap.className = 'sec'; wrap.dataset.s = si;
+    const h = document.createElement('div'); h.className = 'sec-h';
+    h.innerHTML = `<span class="sec-name"></span>${sec.rep > 1 ? `<span class="sec-rep">×${sec.rep}</span>` : ''}`;
+    h.querySelector('.sec-name').textContent = sec.name;
+    const tab = document.createElement('div'); tab.className = 'tab'; tab.setAttribute('role', 'group'); tab.setAttribute('aria-label', 'Tablatura de ' + sec.name);
+    const lab = document.createElement('div'); lab.className = 'tlab';
+    lab.innerHTML = '<span></span>' + TAB_LBL.map(l => `<span>${l}</span>`).join('');
+    tab.appendChild(lab);
+    sec.chords.forEach((c, k) => {
+      const f = shapeForText(c);
+      const col = document.createElement('button');
+      col.type = 'button'; col.className = 'tcol'; col.dataset.k = k;
+      col.setAttribute('aria-label', `${displayChord(c)}: ${f ? shapeLabel(f) : 'sin forma'}`);
+      col.innerHTML = `<span class="tname"></span>` + TAB_ROWS.map(i => `<span class="tcell">${f ? (f[i] < 0 ? 'x' : f[i]) : '?'}</span>`).join('');
+      col.querySelector('.tname').textContent = displayChord(c);
+      col.addEventListener('click', () => loadChordText(c));
+      tab.appendChild(col);
     });
-    box.appendChild(b);
+    const end = document.createElement('div'); end.className = 'tend'; tab.appendChild(end);
+    wrap.append(h, tab); box.appendChild(wrap);
   });
-  $('#progInput').value = prog.join(' ');
+  $('#songNote').textContent = s.n || '';
+  $('#songNote').hidden = !s.n;
+  $('#progInput').value = songText();
   $('#progErr').textContent = '';
-  $('#songSearch').href = 'https://www.google.com/search?q=' + encodeURIComponent(`La Ley ${s.t} MTV Unplugged acordes`);
+  $('#songCustom').hidden = !load('ag.song.' + songIdx);
+  $('#songSearch').href = LC + s.u;
 }
 function markProg(i) {
-  $('#prog').querySelectorAll('button').forEach((b, k) => b.classList.toggle('now', k === i));
+  document.querySelectorAll('#sections .tcol.now').forEach(b => b.classList.remove('now'));
+  document.querySelectorAll('#sections .sec.now').forEach(b => b.classList.remove('now'));
+  if (!play || !play.prog || i < 0) return;
+  const e = play.prog[i];
+  const sec = document.querySelector(`#sections .sec[data-s="${e.s}"]`);
+  if (!sec) return;
+  sec.classList.add('now');
+  const col = sec.querySelector(`.tcol[data-k="${e.k}"]`);
+  if (col) { col.classList.add('now'); const tab = col.parentElement; tab.scrollLeft = Math.max(0, col.offsetLeft - tab.clientWidth / 2); }
 }
 function saveProg() {
-  const toks = $('#progInput').value.split(/\s+/).filter(Boolean);
-  const bad = toks.filter(t => !shapeForText(t));
-  if (!toks.length) { $('#progErr').textContent = 'Escribe al menos un acorde, por ejemplo: Am F C G'; return; }
-  if (bad.length) { $('#progErr').textContent = `No reconozco: ${bad.join(', ')}. Usa cifrado americano, por ejemplo Am, F#m, Bb7, Cmaj7, Dsus4.`; return; }
-  const txt = toks.join(' ');
-  if (txt === SONGS[songIdx].p) { try { localStorage.removeItem('ag.prog.' + songIdx); } catch (e) {} }
-  else save('ag.prog.' + songIdx, txt);
+  const txt = $('#progInput').value.trim();
+  const { secs, bad } = parseSong(txt);
+  if (!secs.length) { $('#progErr').textContent = 'Escribe al menos una línea, por ejemplo: Coro: Am F C G x2'; return; }
+  if (bad.length) { $('#progErr').textContent = `No reconozco: ${[...new Set(bad)].join(', ')}. Usa cifrado americano, por ejemplo Am, F#m, Bb7, Cmaj7, Dsus4, D/F#.`; return; }
+  if (txt === SONGS[songIdx].s) { try { localStorage.removeItem('ag.song.' + songIdx); } catch (e) {} }
+  else save('ag.song.' + songIdx, txt);
   const was = play && play.mode === 'song'; stop();
   renderSong();
-  $('#progErr').textContent = '';
   if (was) start('song');
 }
 $('#progSave').addEventListener('click', saveProg);
-$('#progInput').addEventListener('keydown', e => { if (e.key === 'Enter') saveProg(); });
+$('#progReset').addEventListener('click', () => { try { localStorage.removeItem('ag.song.' + songIdx); } catch (e) {} stop(); renderSong(); });
 $('#beats').addEventListener('change', () => { if (play && play.mode === 'song') start('song'); });
 
 $('#soundBtn').addEventListener('click', () => {
