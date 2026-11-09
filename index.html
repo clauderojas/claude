@@ -75,6 +75,14 @@ h1 { font: 800 clamp(34px, 6vw, 64px)/0.95 var(--f-display); letter-spacing: -0.
 .btn.primary:hover { background: var(--hi); border-color: var(--hi); }
 .btn[aria-pressed="true"] { background: var(--accent); border-color: var(--accent); color: #fff; }
 .btn .k { font: 500 11px/1 var(--f-mono); opacity: .7; }
+.sound { display: inline-flex; align-items: center; gap: 10px; border: 1px solid var(--line); background: var(--surface); border-radius: 12px; padding: 3px 12px 3px 3px; }
+.sound .btn { border: 0; }
+.sound .btn[aria-pressed="true"] { background: var(--hi); color: var(--surface); }
+.sound.off .btn { animation: nudge 1.6s ease-in-out infinite; background: var(--accent); color: #fff; }
+@keyframes nudge { 0%, 100% { transform: none; } 50% { transform: scale(1.05); } }
+.vol { display: inline-flex; align-items: center; gap: 8px; }
+.vol input { width: 96px; }
+@media (prefers-reduced-motion: reduce) { .sound.off .btn { animation: none; } }
 
 /* ---------- stage ---------- */
 .stage-shell { overflow-x: auto; border-radius: 22px; }
@@ -212,6 +220,10 @@ footer { color: var(--muted); font-size: 13px; padding-block: 0 40px; }
       <p class="lede">Desármala pieza por pieza, pon los dedos en el diapasón para encontrar acordes y rasguea arrastrando el mouse o el dedo sobre la boca de la guitarra.</p>
     </div>
     <div class="tools">
+      <div class="sound off" id="soundBox">
+        <button class="btn" id="soundBtn" type="button" aria-pressed="false"><span id="soundIco" aria-hidden="true">🔈</span> <span id="soundTxt">Activar sonido</span></button>
+        <label class="vol" for="vol"><span class="label">Volumen</span><input type="range" id="vol" min="0" max="100" value="80"></label>
+      </div>
       <button class="btn primary" id="explodeBtn" type="button" aria-pressed="false">Desmontar guitarra</button>
       <button class="btn" id="notationBtn" type="button">Notación: C D E</button>
       <button class="btn" id="clearBtn" type="button">Cuerdas al aire</button>
@@ -788,17 +800,32 @@ function setFrets(f, opts = {}) {
 }
 
 /* ================= audio ================= */
-let ctx = null, bus = null;
+let ctx = null, bus = null, out = null, muted = false;
+const volume = () => Math.pow(+$('#vol').value / 100, 1.6);
+function updateSoundUI() {
+  const on = !!ctx && ctx.state === 'running' && !muted;
+  $('#soundBox').classList.toggle('off', !ctx || ctx.state !== 'running');
+  $('#soundBtn').setAttribute('aria-pressed', on);
+  $('#soundIco').textContent = on ? '🔊' : '🔈';
+  $('#soundTxt').textContent = !ctx || ctx.state !== 'running' ? 'Activar sonido' : muted ? 'Sonido apagado' : 'Sonido activo';
+}
 const bufCache = new Map();
 const voices = [null, null, null, null, null, null];
 function ensureAudio() {
-  if (ctx) { if (ctx.state === 'suspended') ctx.resume(); return; }
+  if (ctx) { if (ctx.state !== 'running') ctx.resume().then(updateSoundUI, () => {}); return; }
   const AC = window.AudioContext || window.webkitAudioContext;
   if (!AC) return;
+  try { if (navigator.audioSession) navigator.audioSession.type = 'playback'; } catch (e) {}
   ctx = new AC();
+  out = ctx.createGain(); out.gain.value = muted ? 0 : volume();
+  out.connect(ctx.destination);
   const comp = ctx.createDynamicsCompressor();
   comp.threshold.value = -14; comp.ratio.value = 3;
-  comp.connect(ctx.destination);
+  comp.connect(out);
+  // unlock (iOS/Safari): play one silent sample inside the gesture
+  const sil = ctx.createBufferSource(); sil.buffer = ctx.createBuffer(1, 1, ctx.sampleRate); sil.connect(out); sil.start(0);
+  ctx.onstatechange = updateSoundUI;
+  setTimeout(updateSoundUI, 60);
   const lowBody = ctx.createBiquadFilter(); lowBody.type = 'peaking'; lowBody.frequency.value = 105; lowBody.Q.value = 1.1; lowBody.gain.value = 5;
   const mid = ctx.createBiquadFilter(); mid.type = 'peaking'; mid.frequency.value = 220; mid.Q.value = 1.4; mid.gain.value = 2.5;
   const hi = ctx.createBiquadFilter(); hi.type = 'lowpass'; hi.frequency.value = 6500;
@@ -864,8 +891,53 @@ function click(when, accent) {
   const o = ctx.createOscillator(), g = ctx.createGain();
   o.frequency.value = accent ? 1760 : 1180; o.type = 'square';
   g.gain.setValueAtTime(0.0001, when); g.gain.exponentialRampToValueAtTime(accent ? 0.12 : 0.07, when + 0.002); g.gain.exponentialRampToValueAtTime(0.0001, when + 0.04);
-  o.connect(g); g.connect(ctx.destination); o.start(when); o.stop(when + 0.05);
+  o.connect(g); g.connect(out); o.start(when); o.stop(when + 0.05);
 }
+/* ---- sound effects for the workshop (wood knocks, bone clicks, tuner ratchet, whoosh) ---- */
+function knock(when, freq = 200, decay = 0.18, gain = 0.5, noiseFreq = 1800) {
+  if (!ctx) return;
+  const t = Math.max(when, ctx.currentTime);
+  const o = ctx.createOscillator(), g = ctx.createGain();
+  o.type = 'triangle';
+  o.frequency.setValueAtTime(freq * 1.6, t); o.frequency.exponentialRampToValueAtTime(freq, t + 0.02);
+  g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(gain, t + 0.003); g.gain.exponentialRampToValueAtTime(0.0001, t + decay);
+  o.connect(g); g.connect(bus); o.start(t); o.stop(t + decay + 0.02);
+  const len = Math.floor(ctx.sampleRate * 0.03), b = ctx.createBuffer(1, len, ctx.sampleRate), d = b.getChannelData(0);
+  for (let k = 0; k < len; k++) d[k] = (Math.random() * 2 - 1) * Math.pow(1 - k / len, 3);
+  const n = ctx.createBufferSource(); n.buffer = b;
+  const f = ctx.createBiquadFilter(); f.type = 'bandpass'; f.frequency.value = noiseFreq; f.Q.value = 1.2;
+  const ng = ctx.createGain(); ng.gain.value = gain * 0.5;
+  n.connect(f); f.connect(ng); ng.connect(bus); n.start(t);
+}
+function ratchet(when, n = 7) { for (let k = 0; k < n; k++) knock(when + k * 0.045, 2400, 0.03, 0.18, 5200); }
+function whoosh(when, up = true, dur = 0.8) {
+  if (!ctx) return;
+  const t = Math.max(when, ctx.currentTime);
+  const len = Math.floor(ctx.sampleRate * dur), b = ctx.createBuffer(1, len, ctx.sampleRate), d = b.getChannelData(0);
+  for (let k = 0; k < len; k++) d[k] = Math.random() * 2 - 1;
+  const s = ctx.createBufferSource(); s.buffer = b;
+  const f = ctx.createBiquadFilter(); f.type = 'bandpass'; f.Q.value = 1.6;
+  f.frequency.setValueAtTime(up ? 300 : 2200, t); f.frequency.exponentialRampToValueAtTime(up ? 2200 : 300, t + dur);
+  const g = ctx.createGain();
+  g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(0.16, t + dur * 0.4); g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+  s.connect(f); f.connect(g); g.connect(bus); s.start(t);
+}
+const PART_SOUND = {
+  tapa:      t => { knock(t, 165, 0.35, 0.6, 900); strumOpen(t + 0.02, 0.25); },
+  fondo:     t => knock(t, 130, 0.4, 0.6, 700),
+  varetas:   t => { knock(t, 420, 0.12, 0.45, 2600); knock(t + 0.09, 470, 0.1, 0.35, 2800); },
+  roseta:    t => knock(t, 320, 0.14, 0.4, 2400),
+  golpeador: t => knock(t, 900, 0.05, 0.3, 4200),
+  mastil:    t => knock(t, 240, 0.22, 0.5, 1400),
+  pala:      t => knock(t, 210, 0.2, 0.5, 1300),
+  diapason:  t => { knock(t, 360, 0.15, 0.45, 2000); [0, 1, 2].forEach(k => pluck(5, 12 + k * 2, t + 0.1 + k * 0.12, 0.5)); },
+  cejuela:   t => knock(t, 1700, 0.05, 0.35, 4800),
+  selleta:   t => knock(t, 1900, 0.05, 0.35, 5000),
+  clavijas:  t => { ratchet(t); pluck(0, 0, t + 0.35, 0.8); },
+  puente:    t => knock(t, 280, 0.2, 0.5, 1800),
+  cuerdas:   t => strumOpen(t, 0.85),
+};
+function strumOpen(t, vel) { strum('D', t, vel, [0, 0, 0, 0, 0, 0]); }
 function strum(dir, when, vel = 0.9, frets = state.frets) {
   if (!ctx) return;
   const t = when ?? ctx.currentTime;
@@ -944,7 +1016,7 @@ svg.addEventListener('pointerdown', e => {
   if (!state.exploded && tuner) { ensureAudio(); pluck(+tuner.dataset.tuner, 0, ctx.currentTime, 0.9); return; }
   if (!state.exploded) return;
   const p = e.target.closest('[data-part]');
-  if (p) selectPart(p.dataset.part);
+  if (p) { selectPart(p.dataset.part); ensureAudio(); if (ctx) PART_SOUND[p.dataset.part]?.(ctx.currentTime); }
 });
 
 /* ================= explode ================= */
@@ -971,6 +1043,15 @@ function setExploded(on) {
   btn.textContent = on ? 'Armar guitarra' : 'Desmontar guitarra';
   btn.setAttribute('aria-pressed', on);
   $('#hint').textContent = on ? 'Toca cualquier pieza para saber de qué está hecha y para qué sirve.' : 'Toca un traste para poner un dedo. Toca a la izquierda de la cejuela para silenciar una cuerda (✕).';
+  ensureAudio();
+  if (ctx) {
+    const t = ctx.currentTime;
+    damp(t);
+    whoosh(t, on);
+    const ids = Object.keys(PARTS);
+    ids.forEach((id, k) => knock(t + 0.12 + k * 0.055, 160 + (k * 37) % 260, 0.14, 0.32, 1200 + (k * 300) % 2400));
+    if (!on) setTimeout(() => strum('D', undefined, 0.8), 950);
+  }
   if (on) selectPart('tapa');
   else { $('#partinfo').hidden = true; document.querySelectorAll('.part.sel').forEach(n => n.classList.remove('sel')); }
 }
@@ -1245,7 +1326,23 @@ $('#progSave').addEventListener('click', saveProg);
 $('#progInput').addEventListener('keydown', e => { if (e.key === 'Enter') saveProg(); });
 $('#beats').addEventListener('change', () => { if (play && play.mode === 'song') start('song'); });
 
+$('#soundBtn').addEventListener('click', () => {
+  const first = !ctx || ctx.state !== 'running';
+  if (first) { muted = false; ensureAudio(); if (ctx) { out.gain.value = volume(); strum('D', undefined, 0.8); } }
+  else { muted = !muted; out.gain.setTargetAtTime(muted ? 0 : volume(), ctx.currentTime, 0.02); }
+  updateSoundUI();
+});
+$('#vol').addEventListener('input', () => {
+  save('ag.vol', $('#vol').value);
+  if (+$('#vol').value > 0 && muted) muted = false;
+  if (ctx && out) out.gain.setTargetAtTime(muted ? 0 : volume(), ctx.currentTime, 0.02);
+  updateSoundUI();
+});
+// any first touch, click or key unlocks audio
+['pointerdown', 'keydown', 'touchend'].forEach(ev => window.addEventListener(ev, e => { if (!(e.target.closest && e.target.closest('#soundBox'))) ensureAudio(); }, { capture: true, passive: true }));
+
 /* ================= init ================= */
+{ const v = +load('ag.vol'); if (load('ag.vol') !== null && v >= 0 && v <= 100) $('#vol').value = v; }
 latin = load('ag.latin') === '1';
 $('#notationBtn').textContent = latin ? 'Notación: Do Re Mi' : 'Notación: C D E';
 const sb = +load('ag.bpm'); if (sb >= 50 && sb <= 160) bpmIn.value = sb;
