@@ -174,6 +174,9 @@ button{font:inherit;color:inherit}
       <button class="btn primary" id="surprise" type="button" title="Armar un clásico al azar">
         <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="M8 1.5l1.7 4.1 4.3.3-3.3 2.8 1 4.2L8 10.6 4.3 12.9l1-4.2L2 5.9l4.3-.3z"/></svg><span class="t">Un clásico al azar</span>
       </button>
+      <button class="btn" id="twirlBtn" type="button" title="Enrollar la pasta con el tenedor">
+        <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" aria-hidden="true"><path d="M5 1.5v4M8 1.5v4M11 1.5v4M4.5 5.5c0 2 1.5 3 3.5 3s3.5-1 3.5-3M8 8.5v6"/></svg><span class="t">Enrollar</span>
+      </button>
       <button class="btn" id="clear" type="button" title="Volver al bol de pasta sola">
         <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="M2.5 8a5.5 5.5 0 1 0 1.7-4M2.5 2.5v3h3"/></svg><span class="t">Vaciar</span>
       </button>
@@ -187,7 +190,7 @@ button{font:inherit;color:inherit}
       <h1 id="dName">Spaghetti in Bianco</h1>
       <p class="tr" id="dTr">Espaguetis solos, recién escurridos</p>
     </div>
-    <div class="hint">Arrastra para girar · Rueda para acercar</div>
+    <div class="hint">Toca el plato para enrollar · Arrastra para girar</div>
     <div class="loader" id="loader">Hirviendo el agua…</div>
   </main>
 
@@ -617,7 +620,8 @@ function init(){
   const R = mulberry32(5);
   const strands = [];
   const tintStrand = (geo, shade) => { const n = geo.attributes.position.count, a = new Float32Array(n*3).fill(shade); geo.setAttribute('color', new THREE.BufferAttribute(a,3)); return geo; };
-  for (let s=0; s<240; s++){
+  const BASE_N = 240;
+  for (let s=0; s<BASE_N; s++){
     const pts = []; let a = R()*TAU, r = .15 + Math.sqrt(R())*1.12; const dir = R()<.78 ? 1 : -1; const depth = Math.pow(R(),1.5)*.17;
     for (let i=0;i<16;i++){
       a += dir*(.22+R()*.22)/Math.max(.35,r); r = clamp(r + (R()-.5)*.18, .08, 1.28);
@@ -643,9 +647,13 @@ function init(){
   }
   const PASTA_BASE = new THREE.Color('#efc47c');
   const pastaMat = new THREE.MeshPhysicalMaterial({color:PASTA_BASE.clone(), vertexColors:true, roughness:.42, clearcoat:.25, clearcoatRoughness:.35, sheen:.4, sheenColor:new THREE.Color('#fff0c8'), sheenRoughness:.5, envMapIntensity:.8});
-  const pasta = new THREE.Mesh(mergeGeometries(strands), pastaMat);
+  const pasta = new THREE.Mesh(mergeGeometries(strands.slice(0, BASE_N)), pastaMat);
+  const twirl = new THREE.Mesh(mergeGeometries(strands.slice(BASE_N)), pastaMat);
   strands.forEach(g => g.dispose());
-  pasta.castShadow = true; pasta.receiveShadow = true; scene.add(pasta);
+  for (const m of [pasta, twirl]){ m.castShadow = true; m.receiveShadow = true; scene.add(m); }
+  // how far the fork has lifted the twirl; sauce and toppings near the centre follow it
+  const liftU = {value:0};
+  const liftAt = (x, z) => liftU.value * (1 - THREE.MathUtils.smoothstep(Math.hypot(x,z), .25, .62));
 
   // ---------- sauces (blobs that drape over the pasta) ----------
   const blobs = [];
@@ -674,7 +682,12 @@ function init(){
     const g = new THREE.BufferGeometry();
     g.setAttribute('position', new THREE.Float32BufferAttribute(pos,3)); g.setAttribute('color', new THREE.Float32BufferAttribute(col,3));
     g.setIndex(idx); g.computeVertexNormals();
-    const m = new THREE.Mesh(g, new THREE.MeshPhysicalMaterial({vertexColors:true, roughness:b.rough ?? .3, clearcoat:b.clearcoat ?? 1, clearcoatRoughness:.18, envMapIntensity:.55, side:THREE.DoubleSide}));
+    const mat = new THREE.MeshPhysicalMaterial({vertexColors:true, roughness:b.rough ?? .3, clearcoat:b.clearcoat ?? 1, clearcoatRoughness:.18, envMapIntensity:.55, side:THREE.DoubleSide});
+    mat.onBeforeCompile = sh => {
+      sh.uniforms.uLift = liftU;
+      sh.vertexShader = 'uniform float uLift;\n' + sh.vertexShader.replace('#include <begin_vertex>', '#include <begin_vertex>\n  transformed.y += uLift * (1.0 - smoothstep(0.25, 0.62, length(position.xz)));');
+    };
+    const m = new THREE.Mesh(g, mat);
     m.castShadow = true; m.receiveShadow = true; m.visible = false; m.scale.set(.2,1,.2);
     scene.add(m); b.mesh = m; blobs.push(b); return b;
   }
@@ -894,7 +907,7 @@ function init(){
       else { p = 1 - clamp((t - it.delay*.25)/.35, 0, 1); sc = p; }
       if (p > 0) alive = true;
       if (g.on ? p < 1 : p > 0) pending = true;
-      _p.set(it.x, pastaTop(Math.hypot(it.x,it.z)) + sauceAt(it.x,it.z) + g.lift*it.s + drop, it.z);
+      _p.set(it.x, pastaTop(Math.hypot(it.x,it.z)) + sauceAt(it.x,it.z) + liftAt(it.x,it.z) + g.lift*it.s + drop, it.z);
       _s.setScalar(it.s*Math.max(sc, 1e-4)); if (it.sv) _s.multiply(it.sv);
       _m.compose(_p, it.q, _s);
       for (const m of g.meshes) m.setMatrixAt(k, _m);
@@ -903,6 +916,93 @@ function init(){
     g.busy = pending || (g.blob ? (g.on ? g.blob.k < 1 : g.blob.k > 0) : false);
   }
   function set(id, on){ const g = groups[id]; g.on = on; g.busy = true; g.t0 = performance.now(); animUntil = performance.now() + 4000; }
+
+  // ---------- fork ----------
+  function forkGeo(){
+    const s = new THREE.Shape();
+    const seg = (x0,y0,x1,y1,n) => { for (let i=1;i<=n;i++) s.lineTo(lerp(x0,x1,i/n), lerp(y0,y1,i/n)); };
+    const TW = .032, GAP = .024, HW = .1;
+    s.moveTo(-HW, .03);
+    for (let i=0;i<4;i++){
+      const x0 = -HW + i*(TW+GAP), x1 = x0 + TW;
+      s.quadraticCurveTo(x0 + TW/2, -.012, x1, .03);
+      if (i < 3){ seg(x1,.03,x1,.36,8); s.quadraticCurveTo(x1+GAP/2, .385, x1+GAP, .36); seg(x1+GAP,.36,x1+GAP,.03,8); }
+    }
+    seg(HW,.03,HW,.48,10);
+    s.bezierCurveTo(HW,.62,.03,.66,.026,.8);
+    seg(.026,.8,.048,1.6,16);
+    s.quadraticCurveTo(.052,1.87,0,1.88); s.quadraticCurveTo(-.052,1.87,-.048,1.6);
+    seg(-.048,1.6,-.026,.8,16);
+    s.bezierCurveTo(-.03,.66,-HW,.62,-HW,.48);
+    seg(-HW,.48,-HW,.03,10);
+    const g = new THREE.ExtrudeGeometry(s, {depth:.02, bevelEnabled:true, bevelThickness:.006, bevelSize:.006, bevelSegments:3, curveSegments:14});
+    g.translate(0, 0, -.01);
+    const p = g.attributes.position;
+    for (let i=0;i<p.count;i++){ const y = p.getY(i); if (y < .55) p.setZ(i, p.getZ(i) + .045*Math.pow((.55-y)/.55, 2)); }
+    g.computeVertexNormals(); g.scale(1.5, 1.5, 1.5);
+    return g;
+  }
+  const fork = new THREE.Mesh(forkGeo(), new THREE.MeshPhysicalMaterial({color:'#ebe8e2', metalness:1, roughness:.16, clearcoat:.3, envMapIntensity:1.35}));
+  fork.castShadow = true; fork.receiveShadow = true;
+  const forkRig = new THREE.Group(); forkRig.add(fork); scene.add(forkRig);
+  const basis = (yDir, zHint) => { const y = yDir.clone().normalize(), x = new V3().crossVectors(y, zHint).normalize(), z = new V3().crossVectors(x, y); return new Q().setFromRotationMatrix(new THREE.Matrix4().makeBasis(x, y, z)); };
+  const REST_P = new V3(1.95, .045, -.9), REST_Q = basis(new V3(.12, 0, 1), UP);
+  forkRig.position.copy(REST_P); forkRig.quaternion.copy(REST_Q);
+
+  // strands that hang between the lifted twirl and the rest of the pasta
+  const hangMesh = new THREE.Mesh(new THREE.BufferGeometry(), pastaMat); hangMesh.castShadow = true; hangMesh.visible = false; scene.add(hangMesh);
+  const hangSeeds = Array.from({length:10}, (_,i) => ({a: i/10*TAU + R()*.5, r0: .3 + R()*.2, r1: .55 + R()*.35, da: (R()-.5)*.8, sag: R()}));
+  function updateHang(lift, ang){
+    hangMesh.geometry.dispose();
+    if (lift < .01){ hangMesh.visible = false; hangMesh.geometry = new THREE.BufferGeometry(); return; }
+    const gs = hangSeeds.map(h => {
+      const a = h.a + ang, a2 = h.a + h.da;
+      const top = new V3(Math.cos(a)*h.r0, TW_Y0 + lift + .01, Math.sin(a)*h.r0);
+      const bot = new V3(Math.cos(a2)*h.r1, sBase(h.r1) + .004, Math.sin(a2)*h.r1);
+      const mid = top.clone().lerp(bot, .45); mid.x *= 1.1; mid.z *= 1.1; mid.y -= .04 + .05*h.sag;
+      return tintStrand(new THREE.TubeGeometry(new THREE.CatmullRomCurve3([top, mid, bot]), 24, .018, 6), .96);
+    });
+    hangMesh.geometry = mergeGeometries(gs); gs.forEach(g => g.dispose()); hangMesh.visible = true;
+  }
+
+  const forkAnim = {active:false};
+  const K = [0, .9, 1.3, 2.9, 3.5, 4.1, 4.7, 5.7];
+  const ease = x => x < .5 ? 4*x*x*x : 1 - Math.pow(-2*x + 2, 3)/2;
+  let twAngle = 0, baseAngle = 0;
+  function twirlNow(){
+    if (forkAnim.active) return;
+    const back = camera.position.clone().sub(controls.target); back.y = 0; back.normalize();
+    const right = new V3().crossVectors(UP, back).normalize();
+    const lean = new V3().addScaledVector(back, -.38).addScaledVector(right, .3).add(UP);
+    const workQ = basis(lean, back);
+    Object.assign(forkAnim, {active:true, t0:performance.now(), workQ, workQ2: workQ.clone().multiply(new Q().setFromAxisAngle(UP, .6)),
+      hoverP:new V3(0, 1.8, 0), digP:new V3(0, .99, 0), liftP:new V3(0, 1.4, 0), tw0:twAngle, base0:baseAngle});
+  }
+  const _fp = new V3(), _fq = new Q(), _sq = new Q();
+  function updateFork(now){
+    if (!forkAnim.active) return;
+    const A = forkAnim, t = (now - A.t0)/1000 * (reduceMotion ? 1.8 : 1);
+    const ph = (a, b) => ease(clamp((t - K[a])/(K[b] - K[a]), 0, 1));
+    const LIFT = A.liftP.y - A.digP.y;
+    let spin = 0, lift = 0;
+    if (t < K[1]){ const u = ph(0,1); _fp.lerpVectors(REST_P, A.hoverP, u); _fp.y += Math.sin(u*Math.PI)*.5; _fq.slerpQuaternions(REST_Q, A.workQ, u); }
+    else if (t < K[2]){ _fp.lerpVectors(A.hoverP, A.digP, ph(1,2)); _fq.copy(A.workQ); }
+    else if (t < K[3]){ _fp.copy(A.digP); spin = ph(2,3)*3*TAU; _fq.copy(A.workQ).multiply(_sq.setFromAxisAngle(UP, spin)); }
+    else if (t < K[4]){ const u = ph(3,4); _fp.lerpVectors(A.digP, A.liftP, u); spin = 3*TAU + u*.6; lift = u*LIFT; _fq.copy(A.workQ).multiply(_sq.setFromAxisAngle(UP, spin)); }
+    else if (t < K[5]){ _fp.copy(A.liftP); _fp.x += Math.sin((t - K[4])*8)*.012; spin = 3*TAU + .6; lift = LIFT; _fq.copy(A.workQ2); }
+    else if (t < K[6]){ const u = ph(5,6); _fp.lerpVectors(A.liftP, A.digP, u); spin = 3*TAU + .6; lift = (1 - u)*LIFT; _fq.copy(A.workQ2); }
+    else if (t < K[7]){ const u = ph(6,7); _fp.lerpVectors(A.digP, REST_P, u); _fp.y += Math.sin(u*Math.PI)*.8; spin = 3*TAU + .6; _fq.slerpQuaternions(A.workQ2, REST_Q, u); }
+    else { _fp.copy(REST_P); _fq.copy(REST_Q); spin = 3*TAU + .6; A.active = false; animUntil = Math.max(animUntil, now + 300); }
+    forkRig.position.copy(_fp); forkRig.quaternion.copy(_fq);
+    twAngle = A.tw0 + spin; baseAngle = A.base0 + spin*.03;
+    twirl.rotation.y = twAngle; twirl.position.y = lift; pasta.rotation.y = baseAngle;
+    liftU.value = lift;
+    updateHang(lift, twAngle);
+  }
+  $('twirlBtn').addEventListener('click', twirlNow);
+  { let down = null; const el = renderer.domElement;
+    el.addEventListener('pointerdown', e => { down = {x:e.clientX, y:e.clientY, t:performance.now()}; });
+    el.addEventListener('pointerup', e => { if (down && Math.hypot(e.clientX - down.x, e.clientY - down.y) < 6 && performance.now() - down.t < 350) twirlNow(); down = null; }); }
 
   // ---------- sizing ----------
   let fitted = false;
@@ -922,7 +1022,8 @@ function init(){
   renderer.setAnimationLoop(() => {
     const now = performance.now(), dt = Math.min(clock.getDelta(), .05);
     controls.update();
-    if (now < animUntil || IDS.some(id => groups[id].busy)){
+    updateFork(now);
+    if (now < animUntil || forkAnim.active || IDS.some(id => groups[id].busy)){
       for (const id of IDS) updateBlob(groups[id], now);
       for (const id of IDS) updateItems(groups[id], now);
     }
@@ -934,7 +1035,7 @@ function init(){
       sp.position.set(Math.cos(u.a + u.ph*2)*rr, y, Math.sin(u.a + u.ph*2)*rr);
       sp.material.opacity = .085*Math.sin(Math.PI*u.ph); sp.scale.setScalar(.45 + u.ph*1.3); }
     renderer.render(scene, camera);
-    if (first){ first = false; $('loader').classList.add('done'); }
+    if (first){ first = false; $('loader').classList.add('done'); if (!reduceMotion) setTimeout(twirlNow, 1400); }
   });
 
   scene3d = {set, refreshCoat};
