@@ -1,0 +1,948 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Pasta Atelier</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<meta name="description" content="Un bol de spaghetti en 3D: agrega ingredientes y descubre el nombre del plato, su origen, su perfil de sabor y su ficha nutricional.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bodoni+Moda:ital,opsz,wght@0,6..96,400..700;1,6..96,400..700&family=Instrument+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: three-column atelier — pantry | candle-lit stage with the bowl | dish card. Stacks stage-first on narrow screens. */
+:root{
+  --bg:#15100c;
+  --bg-glow:#3d2a1c;
+  --surface:#1d1612;
+  --surface-2:#271e18;
+  --line:rgba(242,229,208,.09);
+  --line-strong:rgba(242,229,208,.2);
+  --fg:#f2e8d7;
+  --muted:#ab9c8b;
+  --faint:#7b6d60;
+  --accent:#e4a840;
+  --accent-soft:rgba(228,168,64,.14);
+  --accent-ink:#1b1206;
+  --protein:#d9714f;
+  --carb:#e4a840;
+  --fat:#a9b562;
+  --font-display:"Bodoni Moda","Bodoni 72","Didot",Georgia,serif;
+  --font-body:"Instrument Sans",system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
+  --font-mono:"IBM Plex Mono",ui-monospace,SFMono-Regular,Menlo,monospace;
+  --radius:18px;
+  color-scheme:dark;
+}
+*{box-sizing:border-box}
+html,body{height:100%}
+body{margin:0;background:var(--bg);color:var(--fg);font-family:var(--font-body);font-size:14px;line-height:1.5;-webkit-font-smoothing:antialiased;overflow:hidden}
+button{font:inherit;color:inherit}
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+
+.app{height:100%;display:grid;grid-template-columns:292px minmax(0,1fr) 352px;gap:14px;padding-block:14px;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px))}
+
+/* ---------- panels ---------- */
+.panel{min-width:0;min-height:0;display:flex;flex-direction:column;background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);overflow:hidden}
+.panel-head{padding:18px 20px 14px;border-bottom:1px solid var(--line);display:flex;align-items:flex-end;justify-content:space-between;gap:12px}
+.panel-body{overflow-y:auto;padding:6px 20px 22px;scrollbar-width:thin;scrollbar-color:var(--line-strong) transparent}
+.eyebrow{font-family:var(--font-mono);font-size:10.5px;letter-spacing:.14em;text-transform:uppercase;color:var(--muted)}
+.panel-title{font-family:var(--font-display);font-size:24px;font-weight:500;letter-spacing:-.01em;margin:2px 0 0;line-height:1.1}
+.count{font-family:var(--font-mono);font-size:11px;color:var(--muted);font-variant-numeric:tabular-nums;white-space:nowrap}
+
+/* ---------- pantry ---------- */
+.group{padding-top:16px}
+.group h3{margin:0 0 10px;display:flex;align-items:baseline;justify-content:space-between;font-weight:500;font-size:12px;color:var(--fg)}
+.group h3 span{font-family:var(--font-display);font-style:italic;color:var(--faint);font-size:13px;font-weight:400}
+.chips{display:grid;grid-template-columns:1fr;gap:4px}
+.chip{position:relative;display:flex;align-items:center;gap:11px;min-width:0;width:100%;text-align:left;padding:7px 10px;border-radius:12px;border:1px solid var(--line);background:transparent;cursor:pointer;transition:border-color .2s,background .2s,transform .15s}
+.chip:hover{border-color:var(--line-strong);background:rgba(242,229,208,.03)}
+.chip:active{transform:scale(.97)}
+.chip .sw{flex:none;width:20px;height:20px;border-radius:50%;background:radial-gradient(circle at 32% 28%,rgba(255,255,255,.55),transparent 38%),radial-gradient(circle at 50% 60%,var(--c1),var(--c2));box-shadow:inset 0 -2px 4px rgba(0,0,0,.35),0 1px 2px rgba(0,0,0,.4);transition:box-shadow .2s}
+.chip .lbl{flex:1;min-width:0;display:flex;align-items:baseline;justify-content:space-between;gap:10px;line-height:1.25}
+.chip .es{font-size:13px;font-weight:500;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.chip .it{flex:none;font-family:var(--font-display);font-style:italic;font-size:12.5px;color:var(--faint);white-space:nowrap}
+.chip[aria-pressed="true"]{border-color:rgba(228,168,64,.65);background:var(--accent-soft)}
+.chip[aria-pressed="true"] .sw{box-shadow:0 0 0 2px var(--surface),0 0 0 3.5px var(--accent)}
+.chip[aria-pressed="true"] .it{color:var(--accent)}
+
+/* ---------- stage ---------- */
+.stage{position:relative;min-width:0;min-height:0;border-radius:var(--radius);overflow:hidden;background:radial-gradient(ellipse 70% 60% at 50% 42%,var(--bg-glow) 0%,#21170f 45%,var(--bg) 100%);border:1px solid var(--line)}
+.stage canvas{position:absolute;inset:0;width:100%;height:100%;display:block;touch-action:none;cursor:grab}
+.stage canvas:active{cursor:grabbing}
+.stage::after{content:"";position:absolute;inset:0;pointer-events:none;background:radial-gradient(ellipse 85% 85% at 50% 45%,transparent 55%,rgba(8,5,3,.55) 100%)}
+.brand{position:absolute;z-index:2;top:20px;left:22px;display:flex;flex-direction:column;gap:2px;pointer-events:none}
+.brand b{font-family:var(--font-display);font-weight:500;font-size:20px;letter-spacing:.01em}
+.brand b i{color:var(--accent);font-weight:400}
+.brand small{font-family:var(--font-mono);font-size:10.5px;color:var(--muted);letter-spacing:.08em;text-transform:uppercase}
+.tools{position:absolute;z-index:2;top:16px;right:16px;display:flex;gap:8px;flex-wrap:wrap;justify-content:flex-end}
+.btn{display:inline-flex;align-items:center;gap:7px;height:34px;padding:0 13px;border-radius:999px;border:1px solid var(--line-strong);background:rgba(21,16,12,.55);backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);font-size:12.5px;font-weight:500;cursor:pointer;transition:background .2s,border-color .2s,color .2s}
+.btn:hover{border-color:rgba(242,229,208,.38);background:rgba(39,30,24,.8)}
+.btn.primary{background:var(--accent);border-color:var(--accent);color:var(--accent-ink)}
+.btn.primary:hover{background:#efb956}
+.btn svg{width:14px;height:14px}
+.btn[aria-pressed="false"] .on{display:none}
+.btn[aria-pressed="true"] .off{display:none}
+
+.dish{position:absolute;z-index:2;left:0;right:0;bottom:0;padding:70px 26px 24px;background:linear-gradient(to top,rgba(14,10,7,.92) 0%,rgba(14,10,7,.6) 55%,transparent 100%);pointer-events:none}
+.dish .eyebrow{color:var(--accent)}
+.dish h1{margin:6px 0 4px;font-family:var(--font-display);font-style:italic;font-weight:500;font-size:clamp(30px,4.2vw,58px);line-height:1.02;letter-spacing:-.015em;text-wrap:balance;max-width:20ch}
+.dish h1 .w{display:inline-block;white-space:nowrap}
+.dish h1 .ch{display:inline-block;animation:rise .7s cubic-bezier(.2,.8,.2,1) both}
+@keyframes rise{from{opacity:0;transform:translateY(.35em) rotate(4deg);filter:blur(6px)}to{opacity:1;transform:none;filter:none}}
+.dish .tr{margin:0;font-size:14px;color:var(--muted)}
+.dish .tr em{font-family:var(--font-display);font-size:15px}
+.hint{position:absolute;z-index:2;right:22px;bottom:26px;font-family:var(--font-mono);font-size:10.5px;letter-spacing:.08em;text-transform:uppercase;color:var(--faint);pointer-events:none}
+.loader{position:absolute;inset:0;z-index:3;display:grid;place-items:center;font-family:var(--font-display);font-style:italic;font-size:18px;color:var(--muted);background:var(--bg);transition:opacity .8s}
+.loader.done{opacity:0;pointer-events:none}
+
+/* ---------- dish card ---------- */
+.kcal{display:flex;align-items:baseline;gap:10px;padding-top:18px}
+.kcal strong{font-family:var(--font-display);font-weight:500;font-size:52px;line-height:1;letter-spacing:-.02em;font-variant-numeric:tabular-nums lining-nums}
+.kcal span{color:var(--muted);font-size:12.5px;line-height:1.35}
+.macro-bar{display:flex;height:8px;border-radius:99px;overflow:hidden;margin:16px 0 10px;background:var(--surface-2)}
+.macro-bar i{display:block;height:100%;transition:width .7s cubic-bezier(.2,.8,.2,1)}
+.macros{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
+.macros div{display:flex;flex-direction:column;gap:1px}
+.macros b{font-family:var(--font-mono);font-weight:500;font-size:15px;font-variant-numeric:tabular-nums}
+.macros small{display:flex;align-items:center;gap:6px;color:var(--muted);font-size:11.5px}
+.macros small::before{content:"";width:7px;height:7px;border-radius:2px;background:var(--dot)}
+.section{padding-top:22px;margin-top:20px;border-top:1px solid var(--line)}
+.section > .eyebrow{display:block;margin-bottom:12px}
+.desc{margin:0;color:var(--fg);font-size:13.5px;line-height:1.6;max-width:65ch}
+.flavor{display:grid;gap:9px}
+.flavor-row{display:grid;grid-template-columns:72px 1fr 30px;align-items:center;gap:10px;font-size:12.5px}
+.flavor-row .track{position:relative;height:6px;border-radius:99px;background:var(--surface-2);overflow:hidden}
+.flavor-row .track i{position:absolute;inset:0 auto 0 0;border-radius:99px;background:linear-gradient(90deg,#b8782a,var(--accent));transition:width .8s cubic-bezier(.2,.8,.2,1)}
+.flavor-row output{font-family:var(--font-mono);font-size:11.5px;text-align:right;color:var(--muted);font-variant-numeric:tabular-nums}
+.facts{display:grid;grid-template-columns:auto 1fr;gap:9px 16px;margin:0;font-size:13px}
+.facts dt{color:var(--muted)}
+.facts dd{margin:0;text-align:right;font-weight:500}
+.facts dd em{font-family:var(--font-display);font-weight:500;font-size:14px}
+.tags{display:flex;flex-wrap:wrap;gap:6px}
+.tag{font-size:11.5px;padding:4px 10px;border-radius:99px;border:1px solid var(--line-strong);color:var(--fg)}
+.tag.good{border-color:rgba(169,181,98,.5);color:#cbd68c}
+.tag.warn{border-color:rgba(217,113,79,.5);color:#eda088}
+.note{margin:0;padding:12px 14px;border-radius:12px;background:var(--surface-2);font-size:13px;line-height:1.55;color:var(--fg)}
+.note + .note{margin-top:8px}
+.note b{display:block;font-family:var(--font-display);font-style:italic;font-weight:500;font-size:14px;color:var(--accent);margin-bottom:2px}
+.fade{animation:fade .5s ease both}
+@keyframes fade{from{opacity:.2;transform:translateY(4px)}to{opacity:1;transform:none}}
+
+/* ---------- responsive ---------- */
+@media (max-width:1320px){.app{grid-template-columns:262px minmax(0,1fr) 320px}}
+@media (max-width:1100px){
+  body{overflow:auto;height:auto}
+  html{height:auto}
+  .app{height:auto;display:flex;flex-direction:column}
+  .stage{order:1;height:clamp(420px,66svh,640px);flex:none}
+  .pantry{order:2}
+  .card{order:3}
+  .panel-body{overflow:visible}
+  .chips{grid-template-columns:repeat(auto-fill,minmax(230px,1fr))}
+}
+@media (max-width:520px){
+  .dish{padding:60px 18px 18px}
+  .brand{top:16px;left:16px}
+  .tools{top:auto;bottom:auto;right:12px;top:58px;flex-direction:column;align-items:flex-end}
+  .tools .btn .t{display:none}
+  .tools .btn{width:34px;padding:0;justify-content:center}
+  .hint{display:none}
+  .panel-head,.panel-body{padding-left:16px;padding-right:16px}
+}
+@media (prefers-reduced-motion:reduce){
+  .dish h1 .ch,.fade{animation:none}
+  .macro-bar i,.flavor-row .track i{transition:none}
+}
+</style>
+</head>
+<body>
+<div class="app">
+  <aside class="panel pantry" aria-label="Ingredientes">
+    <div class="panel-head">
+      <div>
+        <div class="eyebrow">La despensa</div>
+        <h2 class="panel-title">Ingredientes</h2>
+      </div>
+      <span class="count" id="count">0 de 23</span>
+    </div>
+    <div class="panel-body" id="pantry"></div>
+  </aside>
+
+  <main class="stage" id="stage">
+    <div class="brand"><b>Pasta <i>Atelier</i></b><small>Spaghetti n.º 5 · 100 g de sémola</small></div>
+    <div class="tools">
+      <button class="btn primary" id="surprise" type="button" title="Armar un clásico al azar">
+        <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="M8 1.5l1.7 4.1 4.3.3-3.3 2.8 1 4.2L8 10.6 4.3 12.9l1-4.2L2 5.9l4.3-.3z"/></svg><span class="t">Un clásico al azar</span>
+      </button>
+      <button class="btn" id="clear" type="button" title="Volver al bol de pasta sola">
+        <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="M2.5 8a5.5 5.5 0 1 0 1.7-4M2.5 2.5v3h3"/></svg><span class="t">Vaciar</span>
+      </button>
+      <button class="btn" id="spin" type="button" aria-pressed="true" title="Giro automático">
+        <svg class="on" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><rect x="4" y="3" width="2.6" height="10" rx=".6"/><rect x="9.4" y="3" width="2.6" height="10" rx=".6"/></svg>
+        <svg class="off" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M4.5 2.8v10.4L13 8z"/></svg><span class="t">Giro</span>
+      </button>
+    </div>
+    <div class="dish" aria-live="polite">
+      <div class="eyebrow" id="dOrigin">Italia · en toda casa</div>
+      <h1 id="dName">Spaghetti in Bianco</h1>
+      <p class="tr" id="dTr">Espaguetis solos, recién escurridos</p>
+    </div>
+    <div class="hint">Arrastra para girar · Rueda para acercar</div>
+    <div class="loader" id="loader">Hirviendo el agua…</div>
+  </main>
+
+  <aside class="panel card" aria-label="Ficha del plato">
+    <div class="panel-head">
+      <div>
+        <div class="eyebrow">Ficha del plato</div>
+        <h2 class="panel-title">Propiedades</h2>
+      </div>
+      <span class="count" id="portion">Porción ≈ 220 g</span>
+    </div>
+    <div class="panel-body">
+      <div class="kcal"><strong id="kcal">357</strong><span>kcal<br>por porción</span></div>
+      <div class="macro-bar" aria-hidden="true"><i id="barP" style="background:var(--protein)"></i><i id="barC" style="background:var(--carb)"></i><i id="barF" style="background:var(--fat)"></i></div>
+      <div class="macros">
+        <div><b id="mP">12 g</b><small style="--dot:var(--protein)">Proteínas</small></div>
+        <div><b id="mC">71 g</b><small style="--dot:var(--carb)">Carbohidratos</small></div>
+        <div><b id="mF">2 g</b><small style="--dot:var(--fat)">Grasas</small></div>
+      </div>
+
+      <div class="section">
+        <span class="eyebrow">El plato</span>
+        <p class="desc" id="desc"></p>
+      </div>
+
+      <div class="section">
+        <span class="eyebrow">Perfil de sabor · escala 0–10</span>
+        <div class="flavor" id="flavor"></div>
+      </div>
+
+      <div class="section">
+        <span class="eyebrow">En la mesa</span>
+        <dl class="facts">
+          <dt>Origen</dt><dd id="fOrigin"></dd>
+          <dt>Maridaje</dt><dd><em id="fWine"></em></dd>
+          <dt>Tiempo total</dt><dd id="fTime"></dd>
+          <dt>Dificultad</dt><dd id="fDiff"></dd>
+        </dl>
+      </div>
+
+      <div class="section">
+        <span class="eyebrow">Dieta</span>
+        <div class="tags" id="tags"></div>
+      </div>
+
+      <div class="section">
+        <span class="eyebrow">Nota del chef</span>
+        <div id="notes"></div>
+      </div>
+    </div>
+  </aside>
+</div>
+
+<script type="importmap">
+{ "imports": {
+  "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
+  "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"
+} }
+</script>
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
+import { mergeGeometries, mergeVertices } from 'three/addons/utils/BufferGeometryUtils.js';
+import { RoundedBoxGeometry } from 'three/addons/geometries/RoundedBoxGeometry.js';
+
+/* =====================================================================
+   DATA — ingredients, classic recipes, naming rules
+   ===================================================================== */
+// fl: u umami · s salado · a ácido · p picante · c cremoso · fr fresco
+const BASE = { g:220, kcal:357, p:12.5, c:71, f:1.5, fl:{u:.3,s:.6,c:.5} };
+const CATS = [
+  ['salsas','Salsas y grasas','sughi'],
+  ['proteinas','Proteínas','secondi'],
+  ['huerta','De la huerta','orto'],
+  ['final','Para terminar','finitura'],
+];
+const ING = {
+  tomate:     {es:'Salsa de tomate', it:'pomodoro',   pre:['al','Pomodoro'],     con:'Pomodoro',   cat:'salsas',   sw:['#e4502f','#8c150b'], g:120,kcal:60, p:2, c:9, f:2,  fl:{a:3,u:1.5,s:1,c:.5,fr:1}, vg:1},
+  ragu:       {es:'Ragú de carne',   it:'ragù',       pre:['al','Ragù'],         con:'Ragù',       cat:'salsas',   sw:['#9a3c1f','#4a170a'], g:120,kcal:210,p:14,c:6, f:14, fl:{u:4,s:2,a:1,c:1}, meat:1},
+  crema:      {es:'Crema de leche',  it:'panna',      pre:['alla','Panna'],      con:'Panna',      cat:'salsas',   sw:['#fbf3e3','#d9c7a4'], g:50, kcal:170,p:1, c:2, f:18, fl:{c:4.5,s:.4}, v:1, d:1},
+  pesto:      {es:'Pesto genovés',   it:'pesto',      pre:['al','Pesto'],        con:'Pesto',      cat:'salsas',   sw:['#6f9a2e','#244a10'], g:40, kcal:200,p:4, c:2, f:20, fl:{fr:3.5,u:1.5,s:1.5,c:1.5}, v:1, d:1},
+  aceite:     {es:'Aceite de oliva', it:'olio',       pre:["all'",'Olio'],       con:'Olio',       cat:'salsas',   sw:['#d8c24a','#6f6512'], g:15, kcal:120,p:0, c:0, f:14, fl:{fr:1,c:1}, vg:1},
+  manteca:    {es:'Mantequilla',     it:'burro',      pre:['al','Burro'],        con:'Burro',      cat:'salsas',   sw:['#fbe596','#d6ac3b'], g:20, kcal:145,p:0, c:0, f:16, fl:{c:3,s:.4}, v:1, d:1},
+  guanciale:  {es:'Guanciale',       it:'guanciale',  pre:['al','Guanciale'],    con:'Guanciale',  cat:'proteinas',sw:['#f1d7b4','#a4483a'], g:50, kcal:300,p:6, c:0, f:31, fl:{u:3,s:3.5,c:1}, meat:1},
+  huevo:      {es:'Yema de huevo',   it:'tuorlo',     pre:["all'",'Uovo'],       con:'Uovo',       cat:'proteinas',sw:['#ffc23a','#d9780a'], g:36, kcal:120,p:6, c:1, f:10, fl:{c:3,u:1.5}, v:1},
+  albondigas: {es:'Albóndigas',      it:'polpette',   pre:['alle','Polpette'],   con:'Polpette',   cat:'proteinas',sw:['#8a5132','#3c1d0e'], g:120,kcal:280,p:20,c:8, f:18, fl:{u:3.5,s:2}, meat:1},
+  camarones:  {es:'Langostinos',     it:'gamberi',    pre:['ai','Gamberi'],      con:'Gamberi',    cat:'proteinas',sw:['#ff9a6b','#d04a26'], g:100,kcal:100,p:22,c:0, f:1,  fl:{u:2.5,s:1.5,fr:1}, sea:1},
+  almejas:    {es:'Almejas',         it:'vongole',    pre:['alle','Vongole'],    con:'Vongole',    cat:'proteinas',sw:['#e2d7c4','#857762'], g:100,kcal:70, p:12,c:3, f:1,  fl:{u:2.5,s:2.5,fr:1.5}, sea:1},
+  anchoas:    {es:'Anchoas',         it:'acciughe',   pre:['alle','Acciughe'],   con:'Acciughe',   cat:'proteinas',sw:['#a2604a','#4c2216'], g:20, kcal:40, p:6, c:0, f:2,  fl:{s:4,u:3.5}, sea:1},
+  tomatitos:  {es:'Tomates cherry',  it:'pomodorini', pre:['ai','Pomodorini'],   con:'Pomodorini', cat:'huerta',   sw:['#ff5236','#a0140a'], g:80, kcal:15, p:1, c:3, f:0,  fl:{a:2,fr:2.5,u:.5}, vg:1},
+  hongos:     {es:'Champiñones',     it:'funghi',     pre:['ai','Funghi'],       con:'Funghi',     cat:'huerta',   sw:['#dcc39d','#7b5634'], g:80, kcal:20, p:2.5,c:3,f:.3, fl:{u:2.5,fr:.5}, vg:1},
+  albahaca:   {es:'Albahaca',        it:'basilico',   pre:['al','Basilico'],     con:'Basilico',   cat:'huerta',   sw:['#58a83a','#1d4a12'], g:3,  kcal:1,  p:0, c:0, f:0,  fl:{fr:3}, vg:1},
+  ajo:        {es:'Ajo laminado',    it:'aglio',      pre:["all'",'Aglio'],      con:'Aglio',      cat:'huerta',   sw:['#f6ead0','#c9a46a'], g:6,  kcal:9,  p:0, c:2, f:0,  fl:{p:1,u:1,fr:.5}, vg:1},
+  aceitunas:  {es:'Aceitunas negras',it:'olive',      pre:['alle','Olive'],      con:'Olive',      cat:'huerta',   sw:['#5a3448','#1a0b14'], g:30, kcal:45, p:0, c:1, f:4.5,fl:{s:2.5,a:.5}, vg:1},
+  alcaparras: {es:'Alcaparras',      it:'capperi',    pre:['ai','Capperi'],      con:'Capperi',    cat:'huerta',   sw:['#97a456','#47521f'], g:10, kcal:2,  p:0, c:0, f:0,  fl:{s:2,a:2}, vg:1},
+  parmesano:  {es:'Parmigiano',      it:'parmigiano', pre:['al','Parmigiano'],   con:'Parmigiano', cat:'final',    sw:['#f6e4ac','#c89f4a'], g:20, kcal:80, p:7, c:0, f:6,  fl:{u:3,s:2}, v:1, d:1},
+  pecorino:   {es:'Pecorino Romano', it:'pecorino',   pre:['al','Pecorino'],     con:'Pecorino',   cat:'final',    sw:['#fbf6ea','#bfb193'], g:25, kcal:95, p:7, c:0, f:7,  fl:{s:3,u:2.5,p:.3}, v:1, d:1},
+  pimienta:   {es:'Pimienta negra',  it:'pepe nero',  pre:['al','Pepe Nero'],    con:'Pepe',       cat:'final',    sw:['#4a3a32','#0f0a08'], g:1,  kcal:3,  p:0, c:0, f:0,  fl:{p:2}, vg:1},
+  peperoncino:{es:'Peperoncino',     it:'peperoncino',pre:['al','Peperoncino'],  con:'Peperoncino',cat:'final',    sw:['#e2321c','#7a0c05'], g:2,  kcal:6,  p:0, c:1, f:0,  fl:{p:4}, vg:1},
+  perejil:    {es:'Perejil',         it:'prezzemolo', pre:['al','Prezzemolo'],   con:'Prezzemolo', cat:'final',    sw:['#4f9a35','#173d0d'], g:4,  kcal:1,  p:0, c:0, f:0,  fl:{fr:2}, vg:1},
+};
+const IDS = Object.keys(ING);
+
+const RECIPES = [
+ {id:'carbonara', name:'Spaghetti alla Carbonara', es:'Espaguetis a la carbonara', req:['guanciale','huevo',['pecorino','parmesano']], opt:['pimienta','pecorino','parmesano'], region:'Lazio · Roma', desc:'Yema, pecorino y guanciale crocante emulsionados con el agua de cocción hasta lograr una crema sedosa, sin una gota de nata.', wine:'Frascati Superiore DOCG', time:20, diff:'Media'},
+ {id:'amatriciana', name:"Spaghetti all'Amatriciana", es:'Espaguetis a la amatriciana', req:['tomate','guanciale',['pecorino','parmesano']], opt:['peperoncino','pimienta','aceite','pecorino'], region:'Lazio · Amatrice', desc:'Guanciale dorado en su propia grasa, tomate y pecorino. Nació entre los pastores de los montes de Amatrice.', wine:'Cesanese del Piglio DOCG', time:30, diff:'Media'},
+ {id:'gricia', name:'Spaghetti alla Gricia', es:'Espaguetis a la gricia', req:['guanciale',['pecorino','parmesano']], opt:['pimienta','pecorino','aceite'], region:'Lazio · Roma', desc:'La madre de la carbonara y de la amatriciana: guanciale, pecorino y pimienta, sin tomate ni huevo.', wine:'Cesanese di Olevano Romano', time:20, diff:'Media'},
+ {id:'caciopepe', name:'Spaghetti Cacio e Pepe', es:'Espaguetis con queso y pimienta', req:['pecorino','pimienta'], opt:['parmesano','aceite','manteca'], region:'Lazio · Roma', desc:'Dos ingredientes y mucha técnica: pecorino fundido con agua de cocción y pimienta negra recién tostada.', wine:'Frascati Superiore DOCG', time:15, diff:'Alta'},
+ {id:'aglioolio', name:'Spaghetti Aglio, Olio e Peperoncino', es:'Espaguetis con ajo, aceite y ají', req:['ajo','aceite','peperoncino'], opt:['perejil'], region:'Campania · Nápoles', desc:'El plato de medianoche de Italia: ajo dorado lentamente en aceite de oliva con peperoncino y perejil.', wine:'Falanghina del Sannio DOC', time:15, diff:'Básica'},
+ {id:'aglio', name:'Spaghetti Aglio e Olio', es:'Espaguetis con ajo y aceite', req:['ajo','aceite'], opt:['perejil'], region:'Campania · Nápoles', desc:'Ajo laminado perfumando aceite de oliva extra virgen. Simple, rápido y difícil de superar.', wine:'Falanghina del Sannio DOC', time:12, diff:'Básica'},
+ {id:'vongole', name:'Spaghetti alle Vongole', es:'Espaguetis con almejas', req:['almejas','ajo','aceite'], opt:['perejil','peperoncino','tomatitos'], region:'Campania · Nápoles', desc:'Almejas abiertas al vapor con ajo y aceite; su jugo salino liga la pasta. Infaltable en la Nochebuena napolitana.', wine:'Greco di Tufo DOCG', time:25, diff:'Media'},
+ {id:'scoglio', name:'Spaghetti allo Scoglio', es:'Espaguetis a los frutos de mar', req:['almejas','camarones'], opt:['ajo','aceite','perejil','tomatitos','tomate','peperoncino'], region:'Costa tirrena · de Liguria a Sicilia', desc:'«Del arrecife»: almejas y langostinos salteados con tomate cherry y un chorro de vino blanco.', wine:'Vermentino di Gallura DOCG', time:30, diff:'Media'},
+ {id:'gamberi', name:'Spaghetti ai Gamberi', es:'Espaguetis con langostinos', req:['camarones'], opt:['ajo','aceite','peperoncino','perejil','tomatitos','tomate'], region:'Sicilia · Mazara del Vallo', desc:'Langostinos salteados apenas un minuto para conservar su dulzor, con ajo y perejil al final.', wine:'Etna Bianco DOC', time:20, diff:'Media'},
+ {id:'puttanesca', name:'Spaghetti alla Puttanesca', es:'Espaguetis a la puttanesca', req:['tomate','aceitunas','alcaparras'], opt:['anchoas','ajo','peperoncino','aceite','perejil'], region:'Campania · Nápoles', desc:'Tomate, aceitunas negras y alcaparras: una salsa intensa y salina hecha con lo que hay en la alacena.', wine:'Lacryma Christi del Vesuvio Rosso', time:25, diff:'Básica'},
+ {id:'acciughe', name:'Spaghetti con le Acciughe', es:'Espaguetis con anchoas', req:['anchoas','ajo','aceite'], opt:['peperoncino','perejil','alcaparras'], region:'Sicilia · Palermo', desc:'Anchoas que se deshacen en aceite caliente con ajo. Sal y umami del Mediterráneo en estado puro.', wine:'Grillo Sicilia DOC', time:15, diff:'Básica'},
+ {id:'arrabbiata', name:"Spaghetti all'Arrabbiata", es:'Espaguetis a la arrabbiata', req:['tomate','ajo','peperoncino'], opt:['aceite','perejil','pecorino'], region:'Lazio · Roma', desc:'«Enojada» por el peperoncino: tomate, ajo y ají secado al sol, sin concesiones.', wine:'Montepulciano d’Abruzzo DOC', time:20, diff:'Básica'},
+ {id:'pomodoro', name:'Spaghetti al Pomodoro e Basilico', es:'Espaguetis con tomate y albahaca', req:['tomate','albahaca'], opt:['aceite','ajo','parmesano','tomatitos'], region:'Campania · Nápoles', desc:'Los colores de la bandera: tomate cocido brevemente, albahaca fresca y aceite crudo al final.', wine:'Chianti DOCG', time:20, diff:'Básica'},
+ {id:'marinara', name:'Spaghetti alla Marinara', es:'Espaguetis a la marinera', req:['tomate','ajo'], opt:['aceite','perejil','albahaca'], region:'Campania · Nápoles', desc:'La salsa de los marineros napolitanos: tomate, ajo y aceite, sin queso, porque se conservaba bien a bordo.', wine:'Aglianico del Taburno DOCG', time:20, diff:'Básica'},
+ {id:'semplice', name:'Spaghetti al Pomodoro', es:'Espaguetis con salsa de tomate', req:['tomate'], opt:['aceite','parmesano','manteca'], region:'Italia · cocina de casa', desc:'La salsa de tomate de la nonna, cocida a fuego lento con aceite de oliva. El primer plato de todo niño italiano.', wine:'Sangiovese di Romagna DOC', time:20, diff:'Básica'},
+ {id:'ragu', name:'Spaghetti al Ragù', es:'Espaguetis a la boloñesa', req:['ragu'], opt:['parmesano','manteca','albahaca','tomate'], region:'Emilia-Romaña · Bolonia', desc:'Carne picada cocida durante horas con sofrito, vino y tomate. Bolonia lo sirve con tagliatelle; el mundo, con spaghetti.', wine:'Sangiovese di Romagna Superiore', time:180, diff:'Media'},
+ {id:'polpette', name:'Spaghetti e Polpette', es:'Espaguetis con albóndigas', req:['albondigas','tomate'], opt:['parmesano','albahaca','ajo','aceite','pecorino'], region:'Italoamericano · Nueva York', desc:'Albóndigas de carne cocidas en salsa de tomate: el plato de los inmigrantes del sur de Italia en Nueva York.', wine:'Chianti Classico DOCG', time:60, diff:'Media'},
+ {id:'pesto', name:'Spaghetti al Pesto Genovese', es:'Espaguetis al pesto', req:['pesto'], opt:['parmesano','pecorino','albahaca','aceite'], region:'Liguria · Génova', desc:'Albahaca de Pra, piñones, ajo, parmigiano y aceite ligur machacados en mortero de mármol.', wine:'Vermentino Riviera Ligure di Ponente', time:15, diff:'Básica'},
+ {id:'trapanese', name:'Spaghetti al Pesto Trapanese', es:'Espaguetis al pesto de Trapani', req:['pesto',['tomate','tomatitos']], opt:['albahaca','ajo','aceite','parmesano','pecorino'], region:'Sicilia · Trapani', desc:'El pesto que llegó a Sicilia con los marineros genoveses y allí se encontró con el tomate.', wine:'Grillo Sicilia DOC', time:15, diff:'Básica'},
+ {id:'alfredo', name:'Spaghetti Alfredo', es:'Espaguetis Alfredo', req:['manteca','parmesano'], opt:['crema','pimienta'], region:'Lazio · Roma', desc:'Mantequilla y parmigiano batidos hasta formar una salsa brillante. Lo creó Alfredo di Lelio en Roma, en 1914.', wine:'Soave Classico DOC', time:15, diff:'Básica'},
+ {id:'burro', name:'Spaghetti al Burro', es:'Espaguetis con mantequilla', req:['manteca'], opt:['pimienta','albahaca'], region:'Italia · cocina de casa', desc:'Mantequilla fundida sobre la pasta caliente. Comida de consuelo en cualquier casa italiana.', wine:'Soave Classico DOC', time:12, diff:'Básica'},
+ {id:'panna', name:'Spaghetti alla Panna', es:'Espaguetis a la crema', req:['crema'], opt:['parmesano','pimienta','manteca'], region:'Italia · trattorias de los años 80', desc:'Crema reducida con parmigiano: el plato de moda en las trattorias de los años ochenta.', wine:'Lugana DOC', time:15, diff:'Básica'},
+ {id:'boscaiola', name:'Spaghetti alla Boscaiola', es:'Espaguetis a la leñadora', req:['hongos','guanciale'], opt:['crema','tomate','perejil','parmesano','ajo','aceite','pimienta'], region:'Toscana · Umbría', desc:'«De la leñadora»: hongos del bosque y guanciale, a veces con un poco de crema o de tomate.', wine:'Rosso di Montalcino DOC', time:25, diff:'Media'},
+ {id:'funghi', name:'Spaghetti ai Funghi', es:'Espaguetis con champiñones', req:['hongos'], opt:['ajo','aceite','perejil','manteca','parmesano','pimienta','crema'], region:'Piamonte · Langhe', desc:'Champiñones salteados a fuego vivo hasta dorar, con ajo y perejil para terminar.', wine:"Barbera d'Alba DOC", time:20, diff:'Básica'},
+ {id:'checca', name:'Spaghetti alla Checca', es:'Espaguetis a la checca', req:['tomatitos','albahaca'], opt:['aceite','ajo','aceitunas','alcaparras','parmesano'], region:'Lazio · Roma', desc:'Salsa cruda de verano: tomates cherry, albahaca y aceite, mezclados con la pasta bien caliente.', wine:'Frascati Superiore DOCG', time:15, diff:'Básica'},
+];
+const EMPTY = {name:'Spaghetti in Bianco', es:'Espaguetis solos, recién escurridos', region:'Italia · en toda casa', desc:'El punto de partida: spaghetti de sémola de trigo duro cocidos al dente, 9 minutos en agua con sal. Agrega ingredientes desde la despensa y el plato tomará nombre.', wine:'Agua con gas, por ahora', time:12, diff:'Básica'};
+
+const has = (sel, r) => Array.isArray(r) ? r.some(x => sel.has(x)) : sel.has(r);
+const reqIds = (sel, rec) => rec.req.map(r => Array.isArray(r) ? r.filter(x => sel.has(x)) : [r]).flat();
+const joinList = (arr, and) => arr.length < 2 ? arr.join('') : arr.slice(0,-1).join(', ') + ' ' + and + ' ' + arr[arr.length-1];
+
+function computeDish(sel){
+  const ids = IDS.filter(id => sel.has(id));
+  // nutrition & flavour
+  let g=BASE.g, kcal=BASE.kcal, p=BASE.p, c=BASE.c, f=BASE.f;
+  const fl = {u:0,s:0,a:0,p:0,c:0,fr:0}; for (const k in BASE.fl) fl[k]+=BASE.fl[k];
+  for (const id of ids){ const it=ING[id]; g+=it.g; kcal+=it.kcal; p+=it.p; c+=it.c; f+=it.f; for (const k in it.fl) fl[k]+=it.fl[k]; }
+  const sea = ids.some(id => ING[id].sea), meat = ids.some(id => ING[id].meat), dairy = ids.some(id => ING[id].d);
+  const vegan = ids.every(id => ING[id].vg), veggie = ids.every(id => ING[id].vg || ING[id].v);
+
+  let dish;
+  if (!ids.length) dish = {...EMPTY, kind:'empty'};
+  else {
+    let best=null, bestScore=-1e9;
+    for (const r of RECIPES){
+      if (!r.req.every(x => has(sel, x))) continue;
+      const used = new Set([...reqIds(sel, r), ...r.opt]);
+      const extras = ids.filter(id => !used.has(id));
+      const score = r.req.length*10 - extras.length*3 + r.opt.filter(o => sel.has(o)).length;
+      if (score > bestScore){ bestScore=score; best={r, extras}; }
+    }
+    if (best && best.extras.length <= 2){
+      const {r, extras} = best;
+      dish = {...r, kind:'classic'};
+      if (extras.length){
+        dish.name = r.name + ' con ' + joinList(extras.map(id => ING[id].con), 'e');
+        dish.es = r.es + ' con ' + joinList(extras.map(id => ING[id].es.toLowerCase()), 'y');
+        dish.desc = r.desc + ' Esta versión suma ' + joinList(extras.map(id => ING[id].es.toLowerCase()), 'y') + '.';
+        dish.region = r.region + ' · versión libre';
+      }
+    } else if (ids.length <= 2 && !best){
+      const [a, b] = ids;
+      dish = {
+        kind:'simple',
+        name: 'Spaghetti ' + ING[a].pre.join(ING[a].pre[0].endsWith("'") ? '' : ' ') + (b ? ' e ' + ING[b].con : ''),
+        es: 'Espaguetis con ' + joinList(ids.map(id => ING[id].es.toLowerCase()), 'y'),
+        region:'Cocina de autor · Italia libre',
+        desc:'Una combinación corta y directa: ' + joinList(ids.map(id => ING[id].es.toLowerCase()), 'y') + ' sobre spaghetti al dente. Menos es más.',
+        time: 12 + ids.length*3, diff:'Básica',
+      };
+    } else {
+      const spicy = fl.p >= 5, creamy = fl.c >= 6, meatN = ids.filter(id => ING[id].meat).length;
+      let n;
+      if (sea) n = ['Spaghetti del Pescatore','Espaguetis del pescador'];
+      else if (meatN >= 2) n = ['Spaghetti del Macellaio','Espaguetis del carnicero'];
+      else if (spicy) n = ["Spaghetti all'Inferno",'Espaguetis del infierno'];
+      else if (creamy) n = ['Spaghetti Vellutati','Espaguetis aterciopelados'];
+      else if (vegan) n = ["Spaghetti dell'Orto",'Espaguetis de la huerta'];
+      else n = ['Spaghetti della Casa','Espaguetis de la casa'];
+      const based = best ? ' Parte de una base de ' + best.r.es.toLowerCase().replace('espaguetis ','') + ' y la lleva a otro lugar.' : '';
+      dish = {
+        kind:'creative', name:n[0], es:n[1] + ' · creación propia',
+        region:'Cocina de autor · creación libre',
+        desc:'Una receta que no figura en ningún recetario: ' + joinList(ids.map(id => ING[id].es.toLowerCase()), 'y') + '.' + based,
+        time: 15 + ids.length*3, diff: ids.length > 6 ? 'Alta' : 'Media',
+      };
+    }
+    if (!dish.wine){
+      dish.wine = sea ? 'Vermentino di Sardegna DOC' : meat ? 'Chianti Classico DOCG' : fl.p >= 5 ? 'Lambrusco di Sorbara, bien frío' : fl.c >= 5 ? 'Soave Classico DOC' : (fl.a + fl.fr) >= 5 ? 'Pinot Grigio delle Venezie' : 'Montepulciano d’Abruzzo DOC';
+    }
+  }
+
+  // tags
+  const tags = [];
+  if (vegan) tags.push(['Vegano','good']); else if (veggie) tags.push(['Vegetariano','good']);
+  if (meat) tags.push(['Con carne','']);
+  if (sea) tags.push(['Del mar','']);
+  if (dairy) tags.push(['Contiene lácteos','warn']);
+  if (ids.includes('huevo')) tags.push(['Contiene huevo','warn']);
+  if (sea) tags.push(['Contiene mariscos','warn']);
+  tags.push(['Contiene gluten','warn']);
+  if (p >= 30) tags.push(['Alto en proteína','good']);
+
+  // chef notes
+  const notes = [];
+  const cheese = sel.has('parmesano') || sel.has('pecorino');
+  if (sea && cheese) notes.push(['Regla de la nonna','En Italia casi nunca se pone queso sobre mariscos: tapa el sabor del mar.']);
+  if (sel.has('crema') && sel.has('huevo') && sel.has('guanciale')) notes.push(['Sobre la carbonara','La versión romana no lleva crema: la cremosidad sale de la yema emulsionada con pecorino y agua de cocción.']);
+  if (dish.id === 'amatriciana' && sel.has('ajo')) notes.push(['Sobre la amatriciana','La receta de Amatrice no lleva ajo ni cebolla; el sabor lo da la grasa del guanciale.']);
+  if (sel.has('ragu')) notes.push(['Spaghetti bolognese','En Bolonia no existe: allí el ragú va con tagliatelle. Con spaghetti es la versión que conquistó el mundo.']);
+  if (sel.has('albondigas')) notes.push(['Historia','Las albóndigas con spaghetti nacieron en Nueva York a comienzos del siglo XX.']);
+  if (sel.has('huevo') && !sel.has('guanciale')) notes.push(['Técnica','Mezcla la yema fuera del fuego con un cucharón de agua de cocción para que no se cuaje.']);
+  if (fl.p >= 6) notes.push(['Picante alto','Ten pan a mano para la scarpetta y un vino fresco para calmar el ardor.']);
+  if (sel.has('pecorino') && sel.has('pimienta')) notes.push(['Técnica','Tuesta la pimienta en seco antes de agregar el agua de cocción: el aroma se multiplica.']);
+  if (!ids.length) notes.push(['Truco','Reserva una taza del agua de cocción: su almidón ayuda a ligar cualquier salsa.']);
+  if (!notes.length) notes.push(['Truco','Termina la pasta un minuto dentro de la sartén con la salsa, con un poco de agua de cocción, para que se impregne.']);
+
+  const scale = v => Math.round(10*(1-Math.exp(-v/4))*10)/10;
+  return {...dish, g, kcal:Math.round(kcal), p:Math.round(p), c:Math.round(c), f:Math.round(f),
+    flavor:{Umami:scale(fl.u), Salado:scale(fl.s), Ácido:scale(fl.a), Picante:scale(fl.p), Cremoso:scale(fl.c), Fresco:scale(fl.fr)},
+    tags, notes:notes.slice(0,2)};
+}
+
+/* =====================================================================
+   UI
+   ===================================================================== */
+const $ = id => document.getElementById(id);
+const selected = new Set();
+const reduceMotion = matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+function buildPantry(){
+  const root = $('pantry');
+  for (const [cat, label, it] of CATS){
+    const g = document.createElement('section'); g.className='group';
+    g.innerHTML = `<h3>${label} <span>${it}</span></h3>`;
+    const wrap = document.createElement('div'); wrap.className='chips';
+    for (const id of IDS.filter(i => ING[i].cat === cat)){
+      const d = ING[id];
+      const b = document.createElement('button');
+      b.type='button'; b.className='chip'; b.id='ing-'+id; b.setAttribute('aria-pressed','false');
+      b.innerHTML = `<span class="sw" style="--c1:${d.sw[0]};--c2:${d.sw[1]}"></span><span class="lbl"><span class="es">${d.es}</span><span class="it">${d.it}</span></span>`;
+      b.addEventListener('click', () => toggle(id));
+      wrap.appendChild(b);
+    }
+    g.appendChild(wrap); root.appendChild(g);
+  }
+}
+
+let lastName = '';
+function render(){
+  const d = computeDish(selected);
+  $('count').textContent = `${selected.size} de ${IDS.length}`;
+  for (const id of IDS) $('ing-'+id).setAttribute('aria-pressed', selected.has(id) ? 'true' : 'false');
+
+  if (d.name !== lastName){
+    lastName = d.name;
+    const h = $('dName'); h.innerHTML = ''; h.setAttribute('aria-label', d.name);
+    let i = 0;
+    for (const word of d.name.split(' ')){
+      const w = document.createElement('span'); w.className='w'; w.setAttribute('aria-hidden','true');
+      for (const ch of word){ const s=document.createElement('span'); s.className='ch'; s.textContent=ch; s.style.animationDelay=(i++*22)+'ms'; w.appendChild(s); }
+      h.appendChild(w); h.appendChild(document.createTextNode(' '));
+    }
+  }
+  $('dOrigin').textContent = d.region;
+  $('dTr').innerHTML = `<em>${d.es}</em>`;
+  $('portion').textContent = `Porción ≈ ${d.g} g`;
+  $('kcal').textContent = d.kcal;
+  $('mP').textContent = d.p + ' g'; $('mC').textContent = d.c + ' g'; $('mF').textContent = d.f + ' g';
+  const e = d.p*4 + d.c*4 + d.f*9;
+  $('barP').style.width = (d.p*4/e*100)+'%'; $('barC').style.width = (d.c*4/e*100)+'%'; $('barF').style.width = (d.f*9/e*100)+'%';
+  const desc = $('desc'); desc.textContent = d.desc; desc.classList.remove('fade'); void desc.offsetWidth; desc.classList.add('fade');
+  $('flavor').innerHTML = Object.entries(d.flavor).map(([k,v]) =>
+    `<div class="flavor-row"><span>${k}</span><div class="track"><i style="width:${v*10}%"></i></div><output>${v.toFixed(1)}</output></div>`).join('');
+  $('fOrigin').textContent = d.region.split(' · ').slice(0,2).join(' · ');
+  $('fWine').textContent = d.wine;
+  $('fTime').textContent = d.time >= 60 ? `${Math.floor(d.time/60)} h ${d.time%60 ? d.time%60+' min' : ''}`.trim() : `${d.time} min`;
+  $('fDiff').textContent = d.diff;
+  $('tags').innerHTML = d.tags.map(([t,c]) => `<span class="tag ${c}">${t}</span>`).join('');
+  $('notes').innerHTML = d.notes.map(([t,n]) => `<p class="note"><b>${t}</b>${n}</p>`).join('');
+}
+
+function toggle(id){
+  if (selected.has(id)) { selected.delete(id); scene3d?.set(id, false); }
+  else { selected.add(id); scene3d?.set(id, true); }
+  scene3d?.refreshCoat();
+  render();
+}
+function setSelection(ids){
+  for (const id of [...selected]) if (!ids.includes(id)) { selected.delete(id); scene3d?.set(id,false); }
+  for (const id of ids) if (!selected.has(id)) { selected.add(id); scene3d?.set(id,true); }
+  scene3d?.refreshCoat(); render();
+}
+$('clear').addEventListener('click', () => setSelection([]));
+let lastPick = '';
+$('surprise').addEventListener('click', () => {
+  let r; do { r = RECIPES[Math.floor(Math.random()*RECIPES.length)]; } while (r.id === lastPick);
+  lastPick = r.id;
+  const ids = r.req.map(x => Array.isArray(x) ? x[0] : x);
+  for (const o of r.opt) if (Math.random() < .45 && !ids.includes(o)) ids.push(o);
+  setSelection(ids);
+});
+
+buildPantry();
+render();
+
+/* =====================================================================
+   3D SCENE
+   ===================================================================== */
+let scene3d = null;
+const TAU = Math.PI*2, V3 = THREE.Vector3, Q = THREE.Quaternion, UP = new V3(0,1,0);
+const clamp = (v,a,b) => Math.min(b, Math.max(a, v));
+const lerp = (a,b,t) => a + (b-a)*t;
+const easeOutCubic = t => 1 - Math.pow(1-t, 3);
+const easeInCubic = t => t*t*t;
+const easeOutBounce = t => { const n=7.5625, d=2.75; if (t<1/d) return n*t*t; if (t<2/d) return n*(t-=1.5/d)*t+.75; if (t<2.5/d) return n*(t-=2.25/d)*t+.9375; return n*(t-=2.625/d)*t+.984375; };
+function mulberry32(a){ return function(){ a|=0; a=a+0x6D2B79F5|0; let t=Math.imul(a^a>>>15,1|a); t=t+Math.imul(t^t>>>7,61|t)^t; return ((t^t>>>14)>>>0)/4294967296; }; }
+const hashStr = s => { let h=2166136261; for (const c of s) h = Math.imul(h ^ c.charCodeAt(0), 16777619); return h>>>0; };
+const noise2 = (x,z,s) => (Math.sin(x*1.7+s)*Math.sin(z*2.3+s*1.3) + .5*Math.sin(x*4.1+z*3.7+s*2) + .25*Math.sin(x*9.3-z*7.9+s))/1.75;
+
+// ---------- pasta mound surface ----------
+const TW_R0 = .6, TW_R1 = .1, TW_Y0 = .84, TW_H = .32;
+function sBase(r){ const k=r/1.42; return k>=1 ? .38 : .38 + .54*Math.pow(1-k*k, .85); }
+function pastaTop(r){ let y=sBase(r); if (r<TW_R0){ const h=Math.min(1,(TW_R0-r)/(TW_R0-TW_R1)); y=Math.max(y, TW_Y0+TW_H*h); } return y; }
+
+function init(){
+  const stage = $('stage');
+  let renderer;
+  try { renderer = new THREE.WebGLRenderer({antialias:true, alpha:true, powerPreference:'high-performance'}); }
+  catch(e){ $('loader').textContent = 'Este navegador no puede mostrar gráficos 3D (WebGL desactivado).'; return; }
+  renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+  renderer.outputColorSpace = THREE.SRGBColorSpace;
+  renderer.toneMapping = THREE.ACESFilmicToneMapping;
+  renderer.toneMappingExposure = 1.05;
+  renderer.shadowMap.enabled = true;
+  renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+  stage.prepend(renderer.domElement);
+
+  const scene = new THREE.Scene();
+  const pmrem = new THREE.PMREMGenerator(renderer);
+  scene.environment = pmrem.fromScene(new RoomEnvironment(renderer), .04).texture;
+
+  const camera = new THREE.PerspectiveCamera(30, 1, .1, 60);
+  const camDir = new V3(0, .66, .75).normalize();
+  const target = new V3(0, .32, 0);
+  const controls = new OrbitControls(camera, renderer.domElement);
+  controls.target.copy(target);
+  controls.enableDamping = true; controls.dampingFactor = .06;
+  controls.enablePan = false;
+  controls.minPolarAngle = .25; controls.maxPolarAngle = 1.3;
+  controls.autoRotate = !reduceMotion; controls.autoRotateSpeed = .55;
+  $('spin').setAttribute('aria-pressed', String(controls.autoRotate));
+  $('spin').addEventListener('click', e => { controls.autoRotate = !controls.autoRotate; e.currentTarget.setAttribute('aria-pressed', String(controls.autoRotate)); });
+
+  // ---------- lights ----------
+  const key = new THREE.DirectionalLight(0xffe0bd, 2.6);
+  key.position.set(2.6, 6.2, 2.4); key.castShadow = true;
+  key.shadow.mapSize.set(2048, 2048);
+  Object.assign(key.shadow.camera, {left:-2.6, right:2.6, top:2.6, bottom:-2.6, near:1, far:14});
+  key.shadow.bias = -.0004; key.shadow.normalBias = .018;
+  scene.add(key);
+  const rim = new THREE.DirectionalLight(0xbfd2ff, 1.1); rim.position.set(-4, 3, -3.5); scene.add(rim);
+  const fill = new THREE.HemisphereLight(0xfff1df, 0x2a1d12, .35); scene.add(fill);
+  const warm = new THREE.PointLight(0xffb36b, 4, 7, 2); warm.position.set(-2.4, 1.6, 2.2); scene.add(warm);
+
+  // ---------- table ----------
+  const woodTex = (() => {
+    const c = document.createElement('canvas'); c.width = c.height = 1024; const x = c.getContext('2d');
+    x.fillStyle = '#3a271b'; x.fillRect(0,0,1024,1024);
+    const r = mulberry32(11);
+    for (let i=0;i<900;i++){
+      const y0 = r()*1024, amp = 2+r()*9, fq = .002+r()*.01, ph = r()*TAU;
+      x.strokeStyle = r()<.5 ? `rgba(18,10,5,${.05+r()*.18})` : `rgba(120,80,48,${.03+r()*.1})`;
+      x.lineWidth = .6 + r()*2.6; x.beginPath();
+      for (let px=0; px<=1024; px+=16){ const py = y0 + Math.sin(px*fq+ph)*amp + Math.sin(px*.0013+ph*2)*14; px ? x.lineTo(px,py) : x.moveTo(px,py); }
+      x.stroke();
+    }
+    for (const sy of [256, 640, 900]){ x.fillStyle='rgba(10,6,3,.55)'; x.fillRect(0, sy, 1024, 2); }
+    const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = 8; return t;
+  })();
+  const fadeTex = (() => {
+    const c = document.createElement('canvas'); c.width = c.height = 256; const x = c.getContext('2d');
+    const gr = x.createRadialGradient(128,128,10,128,128,128); gr.addColorStop(0,'#fff'); gr.addColorStop(.45,'#bbb'); gr.addColorStop(1,'#000');
+    x.fillStyle = gr; x.fillRect(0,0,256,256); return new THREE.CanvasTexture(c);
+  })();
+  const table = new THREE.Mesh(new THREE.CircleGeometry(7.5, 96), new THREE.MeshStandardMaterial({map:woodTex, alphaMap:fadeTex, transparent:true, roughness:.62, metalness:0, envMapIntensity:.4}));
+  table.rotation.x = -Math.PI/2; table.receiveShadow = true; scene.add(table);
+
+  const aoTex = (() => {
+    const c = document.createElement('canvas'); c.width = c.height = 256; const x = c.getContext('2d');
+    const gr = x.createRadialGradient(128,128,40,128,128,128); gr.addColorStop(0,'rgba(0,0,0,.85)'); gr.addColorStop(.55,'rgba(0,0,0,.45)'); gr.addColorStop(1,'rgba(0,0,0,0)');
+    x.fillStyle = gr; x.fillRect(0,0,256,256); return new THREE.CanvasTexture(c);
+  })();
+  const ao = new THREE.Mesh(new THREE.PlaneGeometry(4.6,4.6), new THREE.MeshBasicMaterial({map:aoTex, transparent:true, depthWrite:false}));
+  ao.rotation.x = -Math.PI/2; ao.position.y = .003; scene.add(ao);
+
+  // ---------- bowl ----------
+  const prof = [[0,.075],[.5,.07],[.62,.04],[.66,.004],[.76,.002],[.8,.04],[1.05,.13],[1.36,.3],[1.58,.5],[1.7,.68],[1.75,.77],[1.735,.796],[1.69,.785],[1.6,.66],[1.44,.46],[1.18,.28],[.8,.17],[.35,.13],[0,.12]].map(([a,b]) => new THREE.Vector2(a,b));
+  const profPts = new THREE.SplineCurve(prof).getPoints(220);
+  let rimIdx = 0; profPts.forEach((p,i) => { if (p.x > profPts[rimIdx].x) rimIdx = i; });
+  const bowlGeo = new THREE.LatheGeometry(profPts, 160);
+  { const n = profPts.length, cnt = bowlGeo.attributes.position.count, col = new Float32Array(cnt*3);
+    const glaze = new THREE.Color('#f5f1e8'), cobalt = new THREE.Color('#203d78'), clay = new THREE.Color('#cdb99c'), tmp = new THREE.Color();
+    for (let k=0;k<cnt;k++){
+      const j = k % n, p = profPts[j]; const outer = j < rimIdx;
+      tmp.copy(glaze);
+      if (outer && ((p.y>.585 && p.y<.6) || (p.y>.625 && p.y<.665))) tmp.copy(cobalt);
+      if (!outer && j > rimIdx && j < rimIdx+6) tmp.copy(cobalt);
+      if (outer && p.y < .03) tmp.copy(clay);
+      col.set([tmp.r,tmp.g,tmp.b], k*3);
+    }
+    bowlGeo.setAttribute('color', new THREE.BufferAttribute(col,3));
+  }
+  const bowl = new THREE.Mesh(bowlGeo, new THREE.MeshPhysicalMaterial({vertexColors:true, roughness:.16, clearcoat:1, clearcoatRoughness:.06, side:THREE.DoubleSide, envMapIntensity:1.1}));
+  bowl.castShadow = true; bowl.receiveShadow = true; scene.add(bowl);
+  // inner wall height lookup, so strands never cross the ceramic
+  const inner = profPts.slice(rimIdx).filter(p => p.x > .05).sort((a,b) => a.x-b.x);
+  const innerY = r => { if (r <= inner[0].x) return inner[0].y; for (let i=1;i<inner.length;i++) if (inner[i].x >= r){ const a=inner[i-1], b=inner[i]; return lerp(a.y,b.y,(r-a.x)/(b.x-a.x)); } return 1; };
+
+  // ---------- spaghetti ----------
+  const R = mulberry32(5);
+  const strands = [];
+  const tintStrand = (geo, shade) => { const n = geo.attributes.position.count, a = new Float32Array(n*3).fill(shade); geo.setAttribute('color', new THREE.BufferAttribute(a,3)); return geo; };
+  for (let s=0; s<240; s++){
+    const pts = []; let a = R()*TAU, r = .15 + Math.sqrt(R())*1.12; const dir = R()<.78 ? 1 : -1; const depth = Math.pow(R(),1.5)*.17;
+    for (let i=0;i<16;i++){
+      a += dir*(.22+R()*.22)/Math.max(.35,r); r = clamp(r + (R()-.5)*.18, .08, 1.28);
+      const y = Math.max(sBase(r) - depth - R()*.02, innerY(r+.03) + .03);
+      pts.push(new V3(Math.cos(a)*r, y, Math.sin(a)*r));
+    }
+    strands.push(tintStrand(new THREE.TubeGeometry(new THREE.CatmullRomCurve3(pts), 72, .018, 6), clamp(1.02 - depth*2.4, .55, 1.04) * (.94 + R()*.08)));
+  }
+  for (let s=0; s<40; s++){
+    const pts = []; const ph = R()*TAU, turns = 2 + R()*1.3, h0 = R()*.08, h1 = .84 + R()*.16, inset = R()*.08;
+    for (let i=0;i<=46;i++){
+      const t = i/46, h = lerp(h0,h1,t);
+      const rad = Math.max(.03, TW_R0 - (TW_R0-TW_R1)*h - inset - .01 + (R()-.5)*.02);
+      const ang = ph + t*turns*TAU;
+      pts.push(new V3(Math.cos(ang)*rad, TW_Y0 + TW_H*h - inset*.7 + (R()-.5)*.012, Math.sin(ang)*rad));
+    }
+    strands.push(tintStrand(new THREE.TubeGeometry(new THREE.CatmullRomCurve3(pts), 150, .018, 6), clamp(1 - inset*3, .7, 1) * (.95 + R()*.07)));
+  }
+  for (let s=0; s<7; s++){ // strands crossing the top of the nest
+    const a = R()*TAU, pts = [];
+    for (let i=0;i<=8;i++){ const t = i/8, rr = lerp(.2,-.2,t), w = (R()-.5)*.04; pts.push(new V3(Math.cos(a)*rr - Math.sin(a)*w, TW_Y0+TW_H - .02 + Math.sin(t*Math.PI)*.035, Math.sin(a)*rr + Math.cos(a)*w)); }
+    strands.push(tintStrand(new THREE.TubeGeometry(new THREE.CatmullRomCurve3(pts), 30, .018, 6), .98));
+  }
+  const PASTA_BASE = new THREE.Color('#efc47c');
+  const pastaMat = new THREE.MeshPhysicalMaterial({color:PASTA_BASE.clone(), vertexColors:true, roughness:.42, clearcoat:.25, clearcoatRoughness:.35, sheen:.4, sheenColor:new THREE.Color('#fff0c8'), sheenRoughness:.5, envMapIntensity:.8});
+  const pasta = new THREE.Mesh(mergeGeometries(strands), pastaMat);
+  strands.forEach(g => g.dispose());
+  pasta.castShadow = true; pasta.receiveShadow = true; scene.add(pasta);
+
+  // ---------- sauces (blobs that drape over the pasta) ----------
+  const blobs = [];
+  function edgeOf(b, th){ return b.radius*(1 + .16*Math.sin(3*th+b.seed) + .09*Math.sin(5*th+b.seed*2.3) + .05*Math.sin(11*th+b.seed*.7)); }
+  function blobH(b, X, Z){
+    const dx = X-b.cx, dz = Z-b.cz, rr = Math.hypot(dx,dz), u = rr/edgeOf(b, Math.atan2(dz,dx));
+    if (u >= 1) return null;
+    return .012 + b.yoff + b.thick*Math.pow(1-u*u, .55) + b.bump*noise2(X*b.freq, Z*b.freq, b.seed)*(1-.6*u);
+  }
+  function makeBlob(o){
+    const b = {cx:0, cz:0, yoff:0, freq:6, bump:.01, seed:1, ...o, k:0};
+    const rings = 30, segs = 150, pos = [], col = [], idx = [];
+    const c1 = new THREE.Color(b.color), c2 = new THREE.Color(b.color2 || b.color), cs = b.speck ? new THREE.Color(b.speck) : null, tmp = new THREE.Color();
+    const rs = mulberry32(b.seed*999);
+    for (let i=0;i<=rings;i++){ const u = i/rings;
+      for (let j=0;j<segs;j++){ const th = j/segs*TAU, rr = u*edgeOf(b,th)*.999;
+        const X = b.cx + Math.cos(th)*rr, Z = b.cz + Math.sin(th)*rr;
+        const n = noise2(X*b.freq, Z*b.freq, b.seed);
+        pos.push(X, pastaTop(Math.hypot(X,Z)) + .012 + b.yoff + b.thick*Math.pow(Math.max(0,1-u*u), .55) + b.bump*n*(1-.6*u), Z);
+        tmp.copy(c1).lerp(c2, clamp(n*.5+.5,0,1)); if (cs && rs() > .9) tmp.copy(cs);
+        col.push(tmp.r, tmp.g, tmp.b);
+      }}
+    for (let i=0;i<rings;i++) for (let j=0;j<segs;j++){
+      const a=i*segs+j, bb=i*segs+(j+1)%segs, c=(i+1)*segs+j, d=(i+1)*segs+(j+1)%segs; idx.push(a,bb,c, bb,d,c);
+    }
+    const g = new THREE.BufferGeometry();
+    g.setAttribute('position', new THREE.Float32BufferAttribute(pos,3)); g.setAttribute('color', new THREE.Float32BufferAttribute(col,3));
+    g.setIndex(idx); g.computeVertexNormals();
+    const m = new THREE.Mesh(g, new THREE.MeshPhysicalMaterial({vertexColors:true, roughness:b.rough ?? .3, clearcoat:b.clearcoat ?? 1, clearcoatRoughness:.18, envMapIntensity:.55, side:THREE.DoubleSide}));
+    m.castShadow = true; m.receiveShadow = true; m.visible = false; m.scale.set(.2,1,.2);
+    scene.add(m); b.mesh = m; blobs.push(b); return b;
+  }
+  function sauceAt(x, z){
+    let best = 0; const rd = Math.hypot(x,z), base = pastaTop(rd);
+    for (const b of blobs){ if (b.k <= .001) continue;
+      const sk = .2 + .8*b.k, X = x/sk, Z = z/sk, h = blobH(b, X, Z);
+      if (h === null) continue;
+      best = Math.max(best, pastaTop(Math.hypot(X,Z)) + h - base);
+    }
+    return best;
+  }
+
+  // ---------- geometry helpers for toppings ----------
+  function leafGeo(L, W, cup, droop){
+    const g = new THREE.PlaneGeometry(1,1,18,8), p = g.attributes.position, col = new Float32Array(p.count*3);
+    for (let i=0;i<p.count;i++){
+      const u = p.getX(i)+.5, v = p.getY(i)*2, w = W*Math.pow(Math.sin(Math.PI*Math.pow(u,.75)), .9);
+      p.setXYZ(i, u*L, cup*v*v*w*3 - droop*u*u + .02*Math.sin(u*9)*W, v*w);
+      const shade = 1 - .25*Math.abs(v) + (Math.abs(v)<.12 ? .25 : 0); col.set([shade,shade,shade], i*3);
+    }
+    g.setAttribute('color', new THREE.BufferAttribute(col,3)); g.computeVertexNormals(); return g;
+  }
+  const tomatoFace = (() => {
+    const c = document.createElement('canvas'); c.width = c.height = 256; const x = c.getContext('2d');
+    const gr = x.createRadialGradient(128,128,20,128,128,128); gr.addColorStop(0,'#f8a27a'); gr.addColorStop(.75,'#e2472b'); gr.addColorStop(1,'#b81d0f');
+    x.fillStyle = gr; x.fillRect(0,0,256,256);
+    for (let k=0;k<3;k++){ const a = k/3*TAU + .4; x.save(); x.translate(128+Math.cos(a)*58,128+Math.sin(a)*58); x.rotate(a);
+      x.fillStyle = 'rgba(247,170,110,.85)'; x.beginPath(); x.ellipse(0,0,40,28,0,0,TAU); x.fill();
+      x.fillStyle = '#f6dc9c'; for (let s=0;s<7;s++){ x.beginPath(); x.ellipse(-24+s*8,(s%2?6:-6),3.5,2.2,.6,0,TAU); x.fill(); } x.restore(); }
+    x.fillStyle = 'rgba(255,190,150,.8)'; x.beginPath(); x.arc(128,128,16,0,TAU); x.fill();
+    const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; return t;
+  })();
+  function shrimpGeo(){
+    const curve = new THREE.CatmullRomCurve3(Array.from({length:10}, (_,i) => { const a = -.3 + i/9*Math.PI*1.3; return new V3(Math.cos(a)*.075, 0, Math.sin(a)*.075); }));
+    const segs = 48, rad = 12, g = new THREE.TubeGeometry(curve, segs, .034, rad, false);
+    const p = g.attributes.position, col = new Float32Array(p.count*3), cA = new THREE.Color('#f2794a'), cB = new THREE.Color('#ffe0cc'), cC = new THREE.Color('#d9532b'), tmp = new THREE.Color(), c = new V3(), v = new V3();
+    for (let i=0;i<=segs;i++){ const u = i/segs; curve.getPointAt(u, c);
+      const f = .22 + .78*THREE.MathUtils.smoothstep(u, 0, .65) * (1 - .2*THREE.MathUtils.smoothstep(u, .88, 1));
+      for (let j=0;j<=rad;j++){ const k = i*(rad+1)+j; v.fromBufferAttribute(p,k).sub(c).multiplyScalar(f); const yy = v.y/(.034*f+1e-6);
+        p.setXYZ(k, c.x+v.x, c.y+v.y, c.z+v.z);
+        tmp.copy(cB).lerp(cA, clamp(.5+yy*.6,0,1)); if (Math.sin(u*Math.PI*14) > .55) tmp.lerp(cC,.45);
+        col.set([tmp.r,tmp.g,tmp.b], k*3); } }
+    g.setAttribute('color', new THREE.BufferAttribute(col,3)); g.computeVertexNormals(); return g;
+  }
+  function clamGeo(){
+    let g = new THREE.SphereGeometry(.075, 36, 14, 0, TAU, 0, Math.PI*.47);
+    const p = g.attributes.position, col = new Float32Array(p.count*3), cA = new THREE.Color('#e3d8c6'), cB = new THREE.Color('#8f7d66'), tmp = new THREE.Color();
+    for (let i=0;i<p.count;i++){ const x=p.getX(i), y=p.getY(i), z=p.getZ(i), ph = Math.atan2(z,x), rib = 1 + .035*Math.cos(ph*26), th = Math.acos(clamp(y/.075,-1,1));
+      p.setXYZ(i, x*rib, y*.55, z*rib*.84);
+      tmp.copy(cA).lerp(cB, (Math.sin(th*22)*.5+.5)*.55 + th*.25); col.set([tmp.r,tmp.g,tmp.b], i*3); }
+    g.setAttribute('color', new THREE.BufferAttribute(col,3)); g.computeVertexNormals(); return g;
+  }
+  function meatballGeo(){
+    let g = new THREE.IcosahedronGeometry(.12, 5); g.deleteAttribute('normal'); g.deleteAttribute('uv'); g = mergeVertices(g);
+    const p = g.attributes.position, col = new Float32Array(p.count*3), cA = new THREE.Color('#7a4429'), cB = new THREE.Color('#3b1c0d'), tmp = new THREE.Color(), v = new V3();
+    for (let i=0;i<p.count;i++){ v.fromBufferAttribute(p,i); const n = noise2(v.x*40, v.z*40+v.y*30, 3) + .5*Math.sin(v.x*90+v.y*70)*Math.sin(v.z*80);
+      v.multiplyScalar(1 + .07*n); v.y *= .88; p.setXYZ(i, v.x, v.y, v.z);
+      tmp.copy(cA).lerp(cB, clamp(.5+n*.6,0,1)); col.set([tmp.r,tmp.g,tmp.b], i*3); }
+    g.setAttribute('color', new THREE.BufferAttribute(col,3)); g.computeVertexNormals(); return g;
+  }
+  function lardonGeo(){
+    const g = new RoundedBoxGeometry(.075,.036,.046, 2, .008); const p = g.attributes.position, col = new Float32Array(p.count*3), meat = new THREE.Color('#b0503f'), fat = new THREE.Color('#f0d3a8'), crisp = new THREE.Color('#c8873f'), tmp = new THREE.Color();
+    for (let i=0;i<p.count;i++){ const y = p.getY(i), x = p.getX(i); tmp.copy(y + Math.sin(x*60)*.004 < -.002 ? meat : fat); if (Math.abs(x) > .03) tmp.lerp(crisp,.5); col.set([tmp.r,tmp.g,tmp.b], i*3); }
+    g.setAttribute('color', new THREE.BufferAttribute(col,3)); return g;
+  }
+  function mushroomGeo(){
+    const s = new THREE.Shape();
+    s.moveTo(-.022,-.06); s.lineTo(-.018,-.012); s.bezierCurveTo(-.06,-.012,-.07,.004,-.064,.018); s.bezierCurveTo(-.052,.06,.052,.06,.064,.018); s.bezierCurveTo(.07,.004,.06,-.012,.018,-.012); s.lineTo(.022,-.06); s.lineTo(-.022,-.06);
+    const g = new THREE.ExtrudeGeometry(s, {depth:.01, bevelEnabled:true, bevelThickness:.003, bevelSize:.003, bevelSegments:2, curveSegments:12});
+    g.center(); g.rotateX(-Math.PI/2); return g;
+  }
+  function anchovyGeo(){
+    const g = new THREE.BoxGeometry(.17,.007,.026, 20,1,3), p = g.attributes.position;
+    for (let i=0;i<p.count;i++){ const x = p.getX(i); p.setY(i, p.getY(i) - 2.4*x*x + .006*Math.sin(x*40)); p.setZ(i, p.getZ(i)*(1 - Math.pow(Math.abs(x)/.085, 3)*.6)); }
+    g.computeVertexNormals(); return g;
+  }
+
+  // ---------- materials ----------
+  const phys = (color, o={}) => new THREE.MeshPhysicalMaterial({color, roughness:.45, envMapIntensity:.9, ...o});
+  const M = {
+    parm: phys('#f2dc9f', {roughness:.78}), pec: phys('#f6f0e2', {roughness:.85}),
+    pepper: phys('#1c1512', {roughness:.85}), chili: phys('#b4190d', {roughness:.45, clearcoat:.4}),
+    parsley: phys('#2f7a1f', {roughness:.5, side:THREE.DoubleSide}),
+    basil: phys('#2e6c20', {vertexColors:true, roughness:.36, clearcoat:.55, clearcoatRoughness:.3, sheen:.6, sheenColor:new THREE.Color('#9ad46e'), side:THREE.DoubleSide}),
+    garlicFace: phys('#f1e4c0', {roughness:.5}), garlicEdge: phys('#d1a052', {roughness:.45}),
+    olive: phys('#2a1720', {roughness:.18, clearcoat:1, clearcoatRoughness:.08}),
+    caper: phys('#6e7a37', {roughness:.5, clearcoat:.4}),
+    tomSkin: phys('#c41f0e', {roughness:.12, clearcoat:1, clearcoatRoughness:.05}),
+    tomFace: new THREE.MeshPhysicalMaterial({map:tomatoFace, roughness:.25, clearcoat:.8, clearcoatRoughness:.2}),
+    mushFace: phys('#e2cba5', {roughness:.62}), mushEdge: phys('#86603b', {roughness:.5, clearcoat:.4}),
+    lardon: phys('#ffffff', {vertexColors:true, roughness:.36, clearcoat:.7, clearcoatRoughness:.25}),
+    yolk: phys('#f59a0c', {roughness:.06, clearcoat:1, clearcoatRoughness:.03, sheen:.3, sheenColor:new THREE.Color('#ffd27a')}),
+    meatball: phys('#ffffff', {vertexColors:true, roughness:.72, clearcoat:.25}),
+    shrimp: phys('#ffffff', {vertexColors:true, roughness:.3, clearcoat:.9, clearcoatRoughness:.15}),
+    clam: phys('#ffffff', {vertexColors:true, roughness:.35, clearcoat:.6}),
+    anchovy: phys('#7d3c29', {roughness:.25, clearcoat:1, clearcoatRoughness:.1}),
+    oil: phys('#d9b02c', {roughness:.02, clearcoat:1, transparent:true, opacity:.5}),
+    butter: phys('#f6dc80', {roughness:.22, clearcoat:.8, clearcoatRoughness:.2}),
+    crumb: phys('#5d2512', {roughness:.6, clearcoat:.5}),
+    pine: phys('#ead7a3', {roughness:.45}),
+  };
+
+  // ---------- placement ----------
+  function place(rng, x, z, {tilt=.4, s=1, yaw, sv}={}){
+    const r = Math.hypot(x,z), e = .01, d = (pastaTop(r+e) - pastaTop(Math.max(0,r-e)))/(2*e);
+    const dx = r > 1e-4 ? x/r : 1, dz = r > 1e-4 ? z/r : 0;
+    const n = new V3(-d*dx, 1, -d*dz).normalize();
+    const q = new Q().setFromUnitVectors(UP, n)
+      .multiply(new Q().setFromEuler(new THREE.Euler((rng()-.5)*tilt, 0, (rng()-.5)*tilt)))
+      .multiply(new Q().setFromAxisAngle(UP, yaw ?? rng()*TAU));
+    return {x, z, q, s, sv, delay:rng()};
+  }
+  function scatter(rng, n, rmin, rmax, opt={}){
+    const out = [];
+    for (let i=0;i<n;i++){ const r = Math.sqrt(lerp(rmin*rmin, rmax*rmax, rng())), th = rng()*TAU;
+      out.push(place(rng, Math.cos(th)*r, Math.sin(th)*r, {...opt, s: lerp(opt.smin ?? .8, opt.smax ?? 1.2, rng())})); }
+    return out;
+  }
+  function ring(rng, n, rmin, rmax, opt={}){
+    const out = [], off = rng()*TAU;
+    for (let i=0;i<n;i++){ const th = off + i/n*TAU + (rng()-.5)*.5, r = lerp(rmin, rmax, rng());
+      out.push(place(rng, Math.cos(th)*r, Math.sin(th)*r, {...opt, s: lerp(opt.smin ?? .9, opt.smax ?? 1.1, rng()), yaw: opt.outward ? -th : undefined})); }
+    return out;
+  }
+
+  // ---------- ingredient definitions ----------
+  const DEF = {
+    tomate:   {blob:{color:'#6a0d04', color2:'#8f1a08', speck:'#4a0803', radius:.86, thick:.07, bump:.022, freq:9, seed:1.3, rough:.42, clearcoat:.45}},
+    ragu:     {blob:{color:'#4a1a0a', color2:'#6e2c14', radius:.8, thick:.085, bump:.03, freq:11, seed:2.1, rough:.5, clearcoat:.4, yoff:.004},
+               parts:[{geo:new THREE.DodecahedronGeometry(.016,0), mat:M.crumb}], items: r => scatter(r, 110, 0, .72, {tilt:3, smin:.6, smax:1.4}), lift:.012, drop:.6},
+    crema:    {blob:{color:'#f3e8d2', color2:'#fbf5e8', radius:1.0, thick:.03, bump:.006, freq:5, seed:3.7, rough:.2, yoff:-.004}},
+    pesto:    {blob:{color:'#355e17', color2:'#5b8a26', speck:'#1f3a0c', radius:.72, thick:.055, bump:.016, freq:14, seed:4.4, rough:.38, yoff:.006, cx:.06, cz:-.05},
+               parts:[{geo:new THREE.SphereGeometry(.014,12,8).scale(1,.7,1.7), mat:M.pine}], items: r => scatter(r, 14, .1, .6, {tilt:1, smin:.8, smax:1.1}), lift:.012},
+    aceite:   {parts:[{geo:new THREE.SphereGeometry(.024,16,8).scale(1,.22,1), mat:M.oil, shadow:false}], items: r => scatter(r, 34, .1, 1.15, {tilt:.1, smin:.6, smax:1.5}), lift:.012, drop:.9},
+    manteca:  {blob:{color:'#f2d06c', color2:'#f7e3a0', radius:.42, thick:.012, bump:.004, freq:6, seed:5.5, rough:.12, yoff:.002},
+               parts:[{geo:new RoundedBoxGeometry(.2,.055,.15,3,.018), mat:M.butter}], items: r => [place(r, .02, .04, {tilt:.15, s:1, sv:new V3(1,.75,1)})], lift:.05, drop:.9, bounce:true},
+    guanciale:{parts:[{geo:lardonGeo(), mat:M.lardon}], items: r => scatter(r, 34, .15, 1.15, {tilt:1.2, smin:1.2, smax:1.6}), lift:.02, bounce:true},
+    huevo:    {parts:[{geo:new THREE.SphereGeometry(.12,48,24).scale(1,.58,1), mat:M.yolk}], items: r => [place(r, 0, 0, {tilt:0, s:1.45})], lift:.05, drop:1.2, bounce:true},
+    albondigas:{parts:[{geo:meatballGeo(), mat:M.meatball}], items: r => [...ring(r, 5, .72, .95, {tilt:.2, smin:1.3, smax:1.45}), place(r, .03, -.02, {tilt:.2, s:1.4})], lift:.08, drop:1.2, bounce:true},
+    camarones:{parts:[{geo:shrimpGeo(), mat:M.shrimp}], items: r => ring(r, 7, .55, 1.0, {tilt:.3, outward:true, smin:.95, smax:1.15}), lift:.03, bounce:true},
+    almejas:  {parts:[{geo:clamGeo(), mat:M.clam}], items: r => ring(r, 10, .5, 1.15, {tilt:.45}), lift:.004, bounce:true},
+    anchoas:  {parts:[{geo:anchovyGeo(), mat:M.anchovy}], items: r => ring(r, 7, .35, .95, {tilt:.2, outward:true}), lift:.02},
+    tomatitos:{parts:[{geo:new THREE.SphereGeometry(.075,32,16,0,TAU,Math.PI/2,Math.PI/2), mat:M.tomSkin}, {geo:new THREE.CircleGeometry(.075,32).rotateX(-Math.PI/2), mat:M.tomFace}],
+               items: r => ring(r, 8, .4, 1.05, {tilt:.6}), lift:.035, bounce:true},
+    hongos:   {parts:[{geo:mushroomGeo(), mat:[M.mushFace, M.mushEdge]}], items: r => scatter(r, 18, .2, 1.1, {tilt:.7}), lift:.015},
+    albahaca: {parts:[{geo:leafGeo(.24,.075,.35,.05), mat:M.basil}], items: r => {
+                 const out = [], n = 5, off = r()*TAU;
+                 for (let i=0;i<n;i++){ const th = off + i/n*TAU, rr = .08 + r()*.06; out.push(place(r, Math.cos(th)*rr, Math.sin(th)*rr, {tilt:.25, yaw:-th, s:.95 + r()*.25})); }
+                 return out; }, lift:.035, drop:.9},
+    ajo:      {parts:[{geo:new THREE.CylinderGeometry(.032,.032,.006,22).scale(1,1,.72), mat:[M.garlicEdge, M.garlicFace, M.garlicFace]}], items: r => scatter(r, 26, .1, 1.1, {tilt:.6}), lift:.008},
+    aceitunas:{parts:[{geo:new THREE.SphereGeometry(.045,28,18).scale(1,.85,1.3), mat:M.olive}], items: r => scatter(r, 9, .25, 1.05, {tilt:.5}), lift:.035, bounce:true},
+    alcaparras:{parts:[{geo:new THREE.IcosahedronGeometry(.017,2), mat:M.caper}], items: r => scatter(r, 28, .1, 1.1, {tilt:.5}), lift:.014},
+    parmesano:{parts:[{geo:new THREE.BoxGeometry(.055,.009,.013), mat:M.parm}], items: r => scatter(r, 190, 0, 1.0, {tilt:1.2, smin:.6, smax:1.3}), lift:.012, drop:.8},
+    pecorino: {parts:[{geo:new THREE.IcosahedronGeometry(.0085,0), mat:M.pec}], items: r => scatter(r, 320, 0, 1.08, {tilt:3, smin:.6, smax:1.4}), lift:.008, drop:.8},
+    pimienta: {parts:[{geo:new THREE.DodecahedronGeometry(.0065,0), mat:M.pepper, shadow:false}], items: r => scatter(r, 260, 0, 1.2, {tilt:3, smin:.6, smax:1.4}), lift:.006, drop:.8},
+    peperoncino:{parts:[{geo:new THREE.TetrahedronGeometry(.014).scale(1,.35,1), mat:M.chili, shadow:false}], items: r => scatter(r, 120, 0, 1.15, {tilt:.6, smin:.6, smax:1.3}), lift:.008, drop:.8},
+    perejil:  {parts:[{geo:new THREE.CircleGeometry(.018,6).rotateX(-Math.PI/2), mat:M.parsley, shadow:false}], items: r => scatter(r, 150, 0, 1.15, {tilt:.9, smin:.6, smax:1.3}), lift:.01, drop:.8},
+  };
+
+  const groups = {};
+  for (const id of IDS){
+    const def = DEF[id]; const g = {id, on:false, t0:-1e9, meshes:[], items:[], blob:null, lift:def.lift ?? .02, drop:def.drop ?? 1.1, bounce:!!def.bounce};
+    if (def.blob) g.blob = makeBlob(def.blob);
+    if (def.parts){
+      g.items = def.items(mulberry32(hashStr(id)));
+      for (const part of def.parts){
+        const im = new THREE.InstancedMesh(part.geo, part.mat, g.items.length);
+        im.castShadow = part.shadow !== false; im.receiveShadow = true; im.visible = false; im.frustumCulled = false;
+        im.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+        scene.add(im); g.meshes.push(im);
+      }
+    }
+    groups[id] = g;
+  }
+  const order = ['tomate','ragu','pesto','crema','manteca']; // sauces stack in this order
+  order.forEach((id,i) => { if (groups[id].blob) groups[id].blob.yoff += i*.004; });
+
+  // ---------- pasta coating (sauce tint) ----------
+  const COAT = {tomate:['#d8673d',.72], ragu:['#be6a3e',.5], pesto:['#a9a84c',.6], crema:['#f6e2b8',.5], huevo:['#f3bd47',.55], manteca:['#f4d27c',.3], aceite:['#f2c86c',.15], pecorino:['#f2e3ba',.22], parmesano:['#f2deac',.18]};
+  const coatTarget = PASTA_BASE.clone(); let gloss = .25, rough = .42;
+  function refreshCoat(){
+    coatTarget.copy(PASTA_BASE); let i = 0;
+    for (const id of Object.keys(COAT)) if (selected.has(id)){ coatTarget.lerp(new THREE.Color(COAT[id][0]), COAT[id][1]/(1+.35*i)); i++; }
+    const wet = ['aceite','manteca','crema','huevo','tomate','ragu','pesto'].some(id => selected.has(id));
+    gloss = wet ? .75 : .25; rough = wet ? .32 : .42;
+    animUntil = performance.now() + 2600;
+  }
+
+  // ---------- steam ----------
+  const steamTex = (() => { const c = document.createElement('canvas'); c.width = c.height = 128; const x = c.getContext('2d');
+    const gr = x.createRadialGradient(64,64,0,64,64,64); gr.addColorStop(0,'rgba(255,255,255,1)'); gr.addColorStop(1,'rgba(255,255,255,0)'); x.fillStyle = gr; x.fillRect(0,0,128,128); return new THREE.CanvasTexture(c); })();
+  const steam = Array.from({length:22}, (_,i) => { const sp = new THREE.Sprite(new THREE.SpriteMaterial({map:steamTex, color:0xfff4e6, transparent:true, opacity:0, depthWrite:false}));
+    sp.userData = {ph:i/22, a:Math.random()*TAU, r:Math.random()*.5, sp:.05+Math.random()*.05}; scene.add(sp); return sp; });
+
+  // ---------- animation ----------
+  let animUntil = 0;
+  const _m = new THREE.Matrix4(), _p = new V3(), _s = new V3();
+  const DUR = reduceMotion ? .25 : .9;
+  function updateBlob(g, now){
+    if (!g.blob) return;
+    g.busy = false;
+    const t = (now - g.t0)/1000;
+    const k = g.on ? easeOutCubic(clamp(t/(DUR*1.2),0,1)) : 1 - easeInCubic(clamp(t/.5,0,1));
+    if (g.on ? k < 1 : k > 0) g.busy = true;
+    g.blob.k = k; const sk = .2 + .8*k; g.blob.mesh.scale.set(sk,1,sk); g.blob.mesh.visible = k > .001;
+  }
+  function updateItems(g, now){
+    if (!g.items.length) { g.busy = false; return; }
+    const t = (now - g.t0)/1000;
+    let pending = false;
+    let alive = false;
+    for (let k=0;k<g.items.length;k++){
+      const it = g.items[k];
+      let p, drop = 0, sc;
+      if (g.on){ p = clamp((t - it.delay*(reduceMotion ? 0 : .55))/DUR, 0, 1); drop = (1 - (g.bounce ? easeOutBounce(p) : easeOutCubic(p)))*g.drop; sc = Math.min(1, p*3.5); }
+      else { p = 1 - clamp((t - it.delay*.25)/.35, 0, 1); sc = p; }
+      if (p > 0) alive = true;
+      if (g.on ? p < 1 : p > 0) pending = true;
+      _p.set(it.x, pastaTop(Math.hypot(it.x,it.z)) + sauceAt(it.x,it.z) + g.lift*it.s + drop, it.z);
+      _s.setScalar(it.s*Math.max(sc, 1e-4)); if (it.sv) _s.multiply(it.sv);
+      _m.compose(_p, it.q, _s);
+      for (const m of g.meshes) m.setMatrixAt(k, _m);
+    }
+    for (const m of g.meshes){ m.instanceMatrix.needsUpdate = true; m.visible = alive || g.on; }
+    g.busy = pending || (g.blob ? (g.on ? g.blob.k < 1 : g.blob.k > 0) : false);
+  }
+  function set(id, on){ const g = groups[id]; g.on = on; g.busy = true; g.t0 = performance.now(); animUntil = performance.now() + 4000; }
+
+  // ---------- sizing ----------
+  let fitted = false;
+  function fit(){
+    const w = stage.clientWidth, h = stage.clientHeight; if (!w || !h) return;
+    renderer.setSize(w, h, false); camera.aspect = w/h;
+    const vf = THREE.MathUtils.degToRad(camera.fov), hf = 2*Math.atan(Math.tan(vf/2)*camera.aspect);
+    const need = Math.max(1.9/Math.tan(vf/2), 2.3/Math.tan(hf/2));
+    controls.minDistance = need*.55; controls.maxDistance = need*1.6;
+    if (!fitted){ camera.position.copy(target).addScaledVector(camDir, need); fitted = true; }
+    else { const off = camera.position.clone().sub(controls.target); camera.position.copy(controls.target).add(off.setLength(need)); }
+    camera.updateProjectionMatrix();
+  }
+  new ResizeObserver(fit).observe(stage); fit();
+
+  const clock = new THREE.Clock(); let first = true;
+  renderer.setAnimationLoop(() => {
+    const now = performance.now(), dt = Math.min(clock.getDelta(), .05);
+    controls.update();
+    if (now < animUntil || IDS.some(id => groups[id].busy)){
+      for (const id of IDS) updateBlob(groups[id], now);
+      for (const id of IDS) updateItems(groups[id], now);
+    }
+    pastaMat.color.lerp(coatTarget, 1 - Math.pow(.02, dt));
+    pastaMat.clearcoat = lerp(pastaMat.clearcoat, gloss, 1 - Math.pow(.05, dt));
+    pastaMat.roughness = lerp(pastaMat.roughness, rough, 1 - Math.pow(.05, dt));
+    for (const sp of steam){ const u = sp.userData; u.ph = (u.ph + dt*u.sp*(reduceMotion ? .3 : 1)) % 1;
+      const y = 1.15 + u.ph*1.7, rr = u.r + u.ph*.4;
+      sp.position.set(Math.cos(u.a + u.ph*2)*rr, y, Math.sin(u.a + u.ph*2)*rr);
+      sp.material.opacity = .085*Math.sin(Math.PI*u.ph); sp.scale.setScalar(.45 + u.ph*1.3); }
+    renderer.render(scene, camera);
+    if (first){ first = false; $('loader').classList.add('done'); }
+  });
+
+  scene3d = {set, refreshCoat};
+  for (const id of selected) set(id, true);
+  refreshCoat();
+}
+
+try { init(); } catch (e) { console.error(e); $('loader').textContent = 'No se pudo preparar la escena 3D.'; }
+</script>
+</body>
+</html>
